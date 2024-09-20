@@ -96,10 +96,10 @@ systemctl enable lightdm
 systemctl enable NetworkManager
 systemctl enable vboxservice
 systemctl enable ntpd.service
-systemctl enable bluetooth.service  # Enable Bluetooth service
-systemctl enable sshd.service        # Enable SSH daemon
-systemctl enable cups.service         # Enable CUPS for printing
-systemctl enable cronie.service       # Enable cron service
+# systemctl enable bluetooth.service  # Enable Bluetooth service
+# systemctl enable sshd.service        # Enable SSH daemon
+# systemctl enable cups.service         # Enable CUPS for printing
+# systemctl enable cronie.service       # Enable cron service
 
 timedatectl set-ntp true
 
