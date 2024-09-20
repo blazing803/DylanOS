@@ -1,4 +1,3 @@
-
 #!/bin/bash 
 
 set -e  # Exit immediately if a command exits with a non-zero status
@@ -114,35 +113,30 @@ grub-mkconfig -o /boot/grub/grub.cfg
 
 # Create wallpapers directory and download wallpapers
 echo "Setting up wallpapers directory..."
-mkdir -p /home/$USERNAME/${USERNAME}_wallpapers
-cd /home/$USERNAME/${USERNAME}_wallpapers
+cd /home/$USERNAME
 
-echo "Downloading wallpapers..."
-git clone https://github.com/D3Ext/aesthetic-wallpapers ./ 
-chown -R $USERNAME:$USERNAME /home/$USERNAME/${USERNAME}_wallpapers
+# Clone the repository for wallpapers
+git clone https://github.com/D3Ext/aesthetic-wallpapers.git
 
-# Function to pick a random wallpaper
-pick_random_wallpaper() {
-  local wallpaper_dir="/home/$USERNAME/${USERNAME}_wallpapers"
-  local wallpapers=("$wallpaper_dir"/*.jpg "$wallpaper_dir"/*.png)
-  local count=${#wallpapers[@]}
-  if [ $count -gt 0 ]; then
-    local random_index=$((RANDOM % count))
-    echo "${wallpapers[$random_index]}"
-  else
-    echo "No wallpapers found"
-  fi
-}
+# Set the wallpapers directory path
+WALLPAPER_DIR="/home/$USERNAME/aesthetic-wallpapers"
 
-# Configure nitrogen to use a random wallpaper
+# Configure Nitrogen to use the first wallpaper found in the directory
 echo "Configuring Nitrogen..."
-random_wallpaper=$(pick_random_wallpaper)
 mkdir -p /home/$USERNAME/.config/nitrogen
-cat <<EOF3 > /home/$USERNAME/.config/nitrogen/bg-saved.cfg
+
+# Use the first .jpg or .png file found in the cloned directory
+DEFAULT_WALLPAPER=$(find "$WALLPAPER_DIR" -type f \( -iname "*.jpg" -o -iname "*.png" \) | head -n 1)
+
+if [[ -n "$DEFAULT_WALLPAPER" ]]; then
+  cat <<EOF3 > /home/$USERNAME/.config/nitrogen/bg-saved.cfg
 [DEFAULT]
-file=$random_wallpaper
+file=$DEFAULT_WALLPAPER
 EOF3
-chown $USERNAME:$USERNAME /home/$USERNAME/.config/nitrogen/bg-saved.cfg
+  chown $USERNAME:$USERNAME /home/$USERNAME/.config/nitrogen/bg-saved.cfg
+else
+  echo "No wallpapers found in $WALLPAPER_DIR."
+fi
 
 # Create i3 configuration directory
 mkdir -p /home/$USERNAME/.config/i3
@@ -227,9 +221,7 @@ bindsym \$mod+Shift+2 move container to workspace number \$ws2
 bindsym \$mod+Shift+3 move container to workspace number \$ws3
 bindsym \$mod+Shift+4 move container to workspace number \$ws4
 bindsym \$mod+Shift+5 move container to workspace number \$ws5
-bindsym \$mod+Shift+6 move container to workspace number \$
-
-ws6
+bindsym \$mod+Shift+6 move container to workspace number \$ws6
 bindsym \$mod+Shift+7 move container to workspace number \$ws7
 bindsym \$mod+Shift+8 move container to workspace number \$ws8
 bindsym \$mod+Shift+9 move container to workspace number \$ws9
@@ -271,4 +263,3 @@ EOF
 umount -R /mnt
 
 echo "Installation complete! Please reboot."
-
