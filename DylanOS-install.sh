@@ -1,4 +1,3 @@
-
 #!/bin/bash
 
 # ASCII Art for DylanOS 4.0
@@ -22,20 +21,34 @@ sleep 3
 # Update the system clock
 timedatectl set-ntp true
 
-# Prompt for the disk and type
+# User Input Variables
 read -p "Enter the disk (e.g., /dev/nvme0n1 or /dev/sda): " DISK
 read -p "Is this an NVMe disk? (yes/no): " NVME_RESPONSE
+read -sp "Enter your root password: " password
+echo  # To move to a new line after the password prompt
+read -p "Enter your username: " username
+read -sp "Enter password for user \$username: " user_password
+echo  # To move to a new line after the user password prompt
+read -p "Enter hostname for the system: " hostname
+read -p "Enter your timezone (e.g., America/New_York): " timezone
 
-# Determine if the disk is NVMe based on user input
-USE_NVME=${NVME_RESPONSE,,} # Lowercase the response
-if [[ "$USE_NVME" == "yes" || "$USE_NVME" == "y" ]]; then
-    ROOT_PART="${DISK}p1"
-    SWAP_PART="${DISK}p2"
-    EFI_PART="${DISK}p3"
+# Prompt for partition numbers
+read -p "Enter the EFI partition number (e.g., 1 for /dev/sda1): " EFI_NUM
+read -p "Enter the swap partition number (e.g., 2 for /dev/sda2): " SWAP_NUM
+read -p "Enter the root partition number (e.g., 3 for /dev/sda3): " ROOT_NUM
+read -p "Enter the home partition number (e.g., 4 for /dev/sda4): " HOME_NUM
+
+# Define partition variables based on user input
+if [[ "${NVME_RESPONSE,,}" == "yes" || "${NVME_RESPONSE,,}" == "y" ]]; then
+    EFI_PART="${DISK}p${EFI_NUM}"
+    SWAP_PART="${DISK}p${SWAP_NUM}"
+    ROOT_PART="${DISK}p${ROOT_NUM}"
+    HOME_PART="${DISK}p${HOME_NUM}"
 else
-    ROOT_PART="${DISK}1"
-    SWAP_PART="${DISK}2"
-    EFI_PART="${DISK}3"
+    EFI_PART="${DISK}${EFI_NUM}"
+    SWAP_PART="${DISK}${SWAP_NUM}"
+    ROOT_PART="${DISK}${ROOT_NUM}"
+    HOME_PART="${DISK}${HOME_NUM}"
 fi
 
 # Confirm with the user before partitioning
@@ -60,6 +73,10 @@ n
 3
 
 
+n
+4
+
+
 w
 EOF
 then
@@ -71,11 +88,14 @@ fi
 mkfs.fat -F 32 $EFI_PART || { echo "Failed to format EFI partition."; exit 1; }
 mkswap $SWAP_PART || { echo "Failed to create swap partition."; exit 1; }
 mkfs.ext4 $ROOT_PART || { echo "Failed to format root partition."; exit 1; }
+mkfs.ext4 $HOME_PART || { echo "Failed to format home partition."; exit 1; }
 
 # Mount the file systems
 mount $ROOT_PART /mnt || { echo "Failed to mount root partition."; exit 1; }
 mkdir -p /mnt/boot
 mount $EFI_PART /mnt/boot || { echo "Failed to mount EFI partition."; exit 1; }
+mkdir -p /mnt/home
+mount $HOME_PART /mnt/home || { echo "Failed to mount home partition."; exit 1; }
 swapon $SWAP_PART || { echo "Failed to enable swap."; exit 1; }
 
 # Install essential packages
@@ -88,17 +108,15 @@ pacstrap -K /mnt \
     xfce4-fsguard-plugin xfce4-mount-plugin xfce4-netload-plugin \
     xfce4-places-plugin xfce4-sensors-plugin xfce4-weather-plugin \
     xfce4-clipman-plugin xfce4-notes-plugin firefox \
-    openssh alacritty iwd wpa_supplicant plank picom || { echo "Package installation failed."; exit 1; }
+    openssh alacritty iwd wpa_supplicant plank picom \
+    pulseaudio NetworkManager || { echo "Package installation failed."; exit 1; }
 
 # Generate fstab
-genfstab -U /mnt > /mnt/etc/fstab
+genfstab -U /mnt >> /mnt/etc/fstab
 
 # Chroot into the new system
 arch-chroot /mnt /bin/bash <<EOF
 # Set timezone
-echo "Available timezones:"
-ls /usr/share/zoneinfo
-read -p "Enter your timezone (e.g., America/New_York): " timezone
 ln -sf /usr/share/zoneinfo/\$timezone /etc/localtime
 hwclock --systohc
 
@@ -108,33 +126,25 @@ locale-gen
 echo "LANG=en_US.UTF-8" > /etc/locale.conf
 
 # Set hostname
-read -p "Enter hostname for the system: " hostname
 echo "\$hostname" > /etc/hostname
 
 # Initramfs
 mkinitcpio -P
 
 # Set root password
-read -sp "Enter your root password: " password
 echo "root:\$password" | chpasswd
 
 # Create a new user
-read -p "Enter your username: " username
-read -sp "Enter password for user \$username: " user_password
 useradd -m -G wheel "\$username"
 echo "\$username:\$user_password" | chpasswd
 
 # Enable and start services
 systemctl enable lightdm
-systemctl start lightdm
 systemctl enable wpa_supplicant
-systemctl start wpa_supplicant
 systemctl enable iwd
-systemctl start iwd
 systemctl --user enable pulseaudio
-systemctl --user start pulseaudio
 systemctl enable NetworkManager
-systemctl enable ssh
+systemctl enable sshd
 
 # Install GRUB
 pacman -S --noconfirm grub efibootmgr
@@ -146,7 +156,7 @@ set timeout=5
 
 # Menu entry for DylanOS
 menuentry "DylanOS 4.0" {
-    set root=(hd0,gpt1)  # Adjust according to your EFI partition
+    set root=(hd0,gpt\$ROOT_NUM)
     echo "Loading DylanOS 4.0..."
     linux /vmlinuz-linux root=$ROOT_PART rw
     initrd /initramfs-linux.img
@@ -154,7 +164,7 @@ menuentry "DylanOS 4.0" {
 
 # Advanced options
 menuentry "Advanced options for DylanOS 4.0" {
-    set root=(hd0,gpt1)  # Adjust according to your EFI partition
+    set root=(hd0,gpt\$ROOT_NUM)
     echo "Loading Advanced options for DylanOS 4.0..."
     linux /vmlinuz-linux root=$ROOT_PART rw
     initrd /initramfs-linux.img
@@ -162,7 +172,7 @@ menuentry "Advanced options for DylanOS 4.0" {
 
 # Recovery mode
 menuentry "Recovery mode for DylanOS 4.0" {
-    set root=(hd0,gpt1)  # Adjust according to your EFI partition
+    set root=(hd0,gpt\$ROOT_NUM)
     echo "Loading Recovery mode for DylanOS 4.0..."
     linux /vmlinuz-linux root=$ROOT_PART rw single
     initrd /initramfs-linux.img
@@ -179,8 +189,8 @@ echo "ID=dylanos" >> /etc/os-release
 echo "ID_LIKE=arch" >> /etc/os-release
 
 # Create a basic i3 config
-mkdir -p /home/$username/.config/i3
-cat << EOF3 > /home/$username/.config/i3/config
+mkdir -p /home/\$username/.config/i3
+cat << EOF3 > /home/\$username/.config/i3/config
 # i3 config
 set \$mod Mod1  # Use Alt as the mod key
 
@@ -192,8 +202,6 @@ exec --no-startup-id nitrogen --restore
 
 # Start a terminal
 bindsym \$mod+Return exec i3-sensible-terminal
-
-# Additional i3 key bindings can go here...
 EOF3
 
 # Change ownership of the i3 config
