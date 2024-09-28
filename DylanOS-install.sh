@@ -57,26 +57,26 @@ if [[ ! $confirm =~ ^[yY]$ ]]; then
     exit 1
 fi
 
-# Partition the disk
+# Partition the disk with 20GB for the root partition
 echo "Partitioning the disk..."
 if ! fdisk $DISK <<EOF
 g
 n
 1
 
-+1G
++1G         # EFI partition (1GB)
 n
 2
 
-+4G
++4G         # Swap partition (4GB)
 n
 3
 
-
++20G        # Root partition (20GB)
 n
 4
 
-
+            # Home partition (use remaining space)
 w
 EOF
 then
@@ -231,4 +231,3 @@ umount -R /mnt || { echo "Failed to unmount partitions."; exit 1; }
 swapoff $SWAP_PART
 
 echo "Installation complete. You can now reboot into DylanOS."
-
