@@ -27,7 +27,7 @@ read -p "Is this an NVMe disk? (yes/no): " NVME_RESPONSE
 read -sp "Enter your root password: " password
 echo  # New line
 read -p "Enter your username: " username
-read -sp "Enter password for user \$username: " user_password
+read -sp "Enter password for user $username: " user_password
 echo  # New line
 read -p "Enter your timezone (e.g., America/New_York): " timezone
 
@@ -118,7 +118,7 @@ genfstab -U /mnt >> /mnt/etc/fstab
 # Chroot into the new system
 arch-chroot /mnt /bin/bash <<EOF
 # Set timezone
-ln -sf /usr/share/zoneinfo/\$timezone /etc/localtime
+ln -sf /usr/share/zoneinfo/$timezone /etc/localtime
 hwclock --systohc
 
 # Set hostname to BIOS product name
@@ -134,11 +134,11 @@ echo "LANG=en_US.UTF-8" > /etc/locale.conf
 mkinitcpio -P
 
 # Set root password
-echo "root:\$password" | chpasswd
+echo "root:$password" | chpasswd
 
 # Create a new user
-useradd -m -G wheel "\$username"
-echo "\$username:\$user_password" | chpasswd
+useradd -m -G wheel "$username"
+echo "$username:$user_password" | chpasswd
 
 # Enable and start services
 systemctl enable lightdm
@@ -158,22 +158,22 @@ set timeout=5
 
 # Menu entry for DylanOS
 menuentry "DylanOS 4.0" {
-    set root=(hd0,gpt\$ROOT_NUM)
-    linux /vmlinuz-linux root=\$ROOT_PART rw
+    set root=(hd0,gpt$ROOT_NUM)
+    linux /vmlinuz-linux root=$ROOT_PART rw
     initrd /initramfs-linux.img
 }
 
 # Advanced options
 menuentry "Advanced options for DylanOS 4.0" {
-    set root=(hd0,gpt\$ROOT_NUM)
-    linux /vmlinuz-linux root=\$ROOT_PART rw
+    set root=(hd0,gpt$ROOT_NUM)
+    linux /vmlinuz-linux root=$ROOT_PART rw
     initrd /initramfs-linux.img
 }
 
 # Recovery mode
 menuentry "Recovery mode for DylanOS 4.0" {
-    set root=(hd0,gpt\$ROOT_NUM)
-    linux /vmlinuz-linux root=\$ROOT_PART rw single
+    set root=(hd0,gpt$ROOT_NUM)
+    linux /vmlinuz-linux root=$ROOT_PART rw single
     initrd /initramfs-linux.img
 }
 EOF2
@@ -200,8 +200,8 @@ cp -r /tmp/wallpapers-main/* /etc/wallpapers/ || { echo "Failed to copy wallpape
 rm -rf /tmp/wallpapers.zip /tmp/wallpapers-main
 
 # Configure nitrogen to use wallpaper4.png
-mkdir -p /home/\$username/.config/nitrogen
-cat << EOF4 > /home/\$username/.config/nitrogen/bg-saved.cfg
+mkdir -p /home/$username/.config/nitrogen
+cat << EOF4 > /home/$username/.config/nitrogen/bg-saved.cfg
 [xin_-1]
 file=/etc/wallpapers/wallpaper4.png
 mode=0
@@ -209,20 +209,20 @@ bgcolor=#000000
 EOF4
 
 # Change ownership of nitrogen config
-chown -R \$username:\$username /home/\$username/.config/nitrogen
+chown -R $username:$username /home/$username/.config/nitrogen
 
 # Download i3 config from GitHub, rename it, and place it in ~/.config/i3
 echo "Downloading i3 config..."
-mkdir -p /home/\$username/.config/i3
-wget https://github.com/blazing803/configs/raw/main/i3-config -O /home/\$username/.config/i3/i3-config || { echo "Failed to download i3 config."; exit 1; }
+mkdir -p /home/$username/.config/i3
+wget https://github.com/blazing803/configs/raw/main/i3-config -O /home/$username/.config/i3/i3-config || { echo "Failed to download i3 config."; exit 1; }
 
 # Rename i3-config to config
-mv /home/\$username/.config/i3/i3-config /home/\$username/.config/i3/config || { echo "Failed to rename i3-config to config."; exit 1; }
+mv /home/$username/.config/i3/i3-config /home/$username/.config/i3/config || { echo "Failed to rename i3-config to config."; exit 1; }
 
 # Set ownership for the i3 config
-chown -R \$username:\$username /home/\$username/.config/i3
+chown -R $username:$username /home/$username/.config/i3
 
-echo "i3 configuration has been successfully downloaded, renamed to 'config', and placed in /home/\$username/.config/i3/."
+echo "i3 configuration has been successfully downloaded, renamed to 'config', and placed in /home/$username/.config/i3/."
 EOF
 
 # Finalize and unmount
