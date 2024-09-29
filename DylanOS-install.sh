@@ -139,6 +139,12 @@ systemctl enable sshd
 pacman -S --noconfirm grub efibootmgr
 
 # Create GRUB configuration
+if [[ "$USE_NVME" == "yes" || "$USE_NVME" == "y" ]]; then
+    ROOT_GRUB="/dev/nvme0n1p3"
+else
+    ROOT_GRUB="/dev/sda3"
+fi
+
 cat << EOF2 > /boot/grub/grub.cfg
 set default=0
 set timeout=5
@@ -146,21 +152,21 @@ set timeout=5
 # Menu entry for DylanOS
 menuentry "DylanOS 4.0" {
     set root=(hd0,gpt1)
-    linux /vmlinuz-linux root=$ROOT_PART rw
+    linux /vmlinuz-linux root=$ROOT_GRUB rw
     initrd /initramfs-linux.img
 }
 
 # Advanced options
 menuentry "Advanced options for DylanOS 4.0" {
     set root=(hd0,gpt1)
-    linux /vmlinuz-linux root=$ROOT_PART rw
+    linux /vmlinuz-linux root=$ROOT_GRUB rw
     initrd /initramfs-linux.img
 }
 
 # Recovery mode
 menuentry "Recovery mode for DylanOS 4.0" {
     set root=(hd0,gpt1)
-    linux /vmlinuz-linux root=$ROOT_PART rw single
+    linux /vmlinuz-linux root=$ROOT_GRUB rw single
     initrd /initramfs-linux.img
 }
 EOF2
@@ -209,12 +215,8 @@ mv /home/$username/.config/i3/i3-config /home/$username/.config/i3/config || { e
 # Set ownership for the i3 config
 chown -R $username:$username /home/$username/.config/i3
 
-echo "i3 configuration has been successfully downloaded, renamed to 'config', and placed in /home/$username/.config/i3."
+echo "i3 configuration has been successfully downloaded, renamed to 'config', and placed in /home/$username/.config/i3/."
 EOF
 
 # Finalize and unmount
-echo "Installation complete. Unmounting partitions..."
-umount -R /mnt || { echo "Failed to unmount partitions."; exit 1; }
-swapoff $SWAP_PART
-
-echo "Installation complete. You can now reboot into DylanOS."
+echo "Installation complete. Unmounting
