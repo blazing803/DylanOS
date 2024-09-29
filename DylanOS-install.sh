@@ -24,6 +24,7 @@ timedatectl set-ntp true
 # User Input Variables
 read -p "Enter the disk (e.g., /dev/nvme0n1 or /dev/sda): " DISK
 read -p "Is this an NVMe disk? (yes/no): " NVME_RESPONSE
+USE_NVME=${NVME_RESPONSE,,} # Lowercase the response
 read -sp "Enter your root password: " password
 echo  # New line
 read -p "Enter your username: " username
@@ -31,23 +32,15 @@ read -sp "Enter password for user $username: " user_password
 echo  # New line
 read -p "Enter your timezone (e.g., America/New_York): " timezone
 
-# Prompt for partition numbers
-read -p "Enter the EFI partition number (e.g., 1 for /dev/sda1): " EFI_NUM
-read -p "Enter the swap partition number (e.g., 2 for /dev/sda2): " SWAP_NUM
-read -p "Enter the root partition number (e.g., 3 for /dev/sda3): " ROOT_NUM
-read -p "Enter the home partition number (e.g., 4 for /dev/sda4): " HOME_NUM
-
-# Define partition variables based on user input
-if [[ "${NVME_RESPONSE,,}" == "yes" || "${NVME_RESPONSE,,}" == "y" ]]; then
-    EFI_PART="${DISK}p${EFI_NUM}"
-    SWAP_PART="${DISK}p${SWAP_NUM}"
-    ROOT_PART="${DISK}p${ROOT_NUM}"
-    HOME_PART="${DISK}p${HOME_NUM}"
+# Define partition variables based on NVMe detection
+if [[ "$USE_NVME" == "yes" || "$USE_NVME" == "y" ]]; then
+    EFI_PART="${DISK}p1"
+    SWAP_PART="${DISK}p2"
+    ROOT_PART="${DISK}p3"
 else
-    EFI_PART="${DISK}${EFI_NUM}"
-    SWAP_PART="${DISK}${SWAP_NUM}"
-    ROOT_PART="${DISK}${ROOT_NUM}"
-    HOME_PART="${DISK}${HOME_NUM}"
+    EFI_PART="${DISK}1"
+    SWAP_PART="${DISK}2"
+    ROOT_PART="${DISK}3"
 fi
 
 # Confirm with the user before partitioning
@@ -57,7 +50,7 @@ if [[ ! $confirm =~ ^[yY]$ ]]; then
     exit 1
 fi
 
-# Partition the disk with 20GB for the root partition
+# Partition the disk
 echo "Partitioning the disk..."
 if ! fdisk $DISK <<EOF
 g
@@ -72,11 +65,7 @@ n
 n
 3
 
-+20G        # Root partition (20GB)
-n
-4
-
-            # Home partition (use remaining space)
+            # Root partition (use remaining space)
 w
 EOF
 then
@@ -89,13 +78,11 @@ echo "Formatting partitions..."
 mkfs.fat -F 32 $EFI_PART || { echo "Failed to format EFI partition."; exit 1; }
 mkswap $SWAP_PART || { echo "Failed to create swap partition."; exit 1; }
 mkfs.ext4 $ROOT_PART || { echo "Failed to format root partition."; exit 1; }
-mkfs.ext4 $HOME_PART || { echo "Failed to format home partition."; exit 1; }
 
 # Mount the file systems
 echo "Mounting filesystems..."
 mount $ROOT_PART /mnt || { echo "Failed to mount root partition."; exit 1; }
 mount --mkdir $EFI_PART /mnt/boot || { echo "Failed to mount EFI partition."; exit 1; }
-mount --mkdir $HOME_PART /mnt/home || { echo "Failed to mount home partition."; exit 1; }
 swapon $SWAP_PART || { echo "Failed to enable swap."; exit 1; }
 
 # Install essential packages
@@ -158,21 +145,21 @@ set timeout=5
 
 # Menu entry for DylanOS
 menuentry "DylanOS 4.0" {
-    set root=(hd0,gpt$ROOT_NUM)
+    set root=(hd0,gpt1)
     linux /vmlinuz-linux root=$ROOT_PART rw
     initrd /initramfs-linux.img
 }
 
 # Advanced options
 menuentry "Advanced options for DylanOS 4.0" {
-    set root=(hd0,gpt$ROOT_NUM)
+    set root=(hd0,gpt1)
     linux /vmlinuz-linux root=$ROOT_PART rw
     initrd /initramfs-linux.img
 }
 
 # Recovery mode
 menuentry "Recovery mode for DylanOS 4.0" {
-    set root=(hd0,gpt$ROOT_NUM)
+    set root=(hd0,gpt1)
     linux /vmlinuz-linux root=$ROOT_PART rw single
     initrd /initramfs-linux.img
 }
@@ -222,7 +209,7 @@ mv /home/$username/.config/i3/i3-config /home/$username/.config/i3/config || { e
 # Set ownership for the i3 config
 chown -R $username:$username /home/$username/.config/i3
 
-echo "i3 configuration has been successfully downloaded, renamed to 'config', and placed in /home/$username/.config/i3/."
+echo "i3 configuration has been successfully downloaded, renamed to 'config', and placed in /home/$username/.config/i3."
 EOF
 
 # Finalize and unmount
