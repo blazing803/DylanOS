@@ -97,7 +97,7 @@ pacstrap -K /mnt base linux linux-firmware base-devel sof-firmware \
     xfce4-places-plugin xfce4-sensors-plugin xfce4-weather-plugin \
     xfce4-clipman-plugin xfce4-notes-plugin firefox \
     openssh alacritty iwd wpa_supplicant plank picom \
-    pulseaudio NetworkManager dmidecode grub nitrogen unzip efibootmgr pcmanfm || { echo "Package installation failed."; exit 1; }
+    pulseaudio networkmanager dmidecode grub nitrogen unzip efibootmgr pacmanfm ark || { echo "Package installation failed."; exit 1; }
 
 # Generate fstab
 echo "Generating fstab..."
@@ -145,29 +145,16 @@ echo "VERSION=\"4.0\"" >> /etc/os-release
 echo "ID=dylanos" >> /etc/os-release
 echo "ID_LIKE=arch" >> /etc/os-release
 
-# Download wallpapers from GitHub
-echo "Downloading wallpapers..."
-mkdir -p /etc/wallpapers
-wget https://github.com/blazing803/wallpapers/archive/refs/heads/main.zip -O /tmp/wallpapers.zip || { echo "Failed to download wallpapers."; exit 1; }
+# Download XFCE4 configuration from GitHub
+echo "Cloning XFCE4 configuration from GitHub..."
+git clone https://github.com/blazing803/configs.git /tmp/configs || { echo "Failed to clone repository."; exit 1; }
 
-# Extract wallpapers
-unzip /tmp/wallpapers.zip -d /tmp || { echo "Failed to unzip wallpapers."; exit 1; }
-cp -r /tmp/wallpapers-main/* /etc/wallpapers/ || { echo "Failed to copy wallpapers."; exit 1; }
+# Move the downloaded XFCE4 configuration to the user's config directory
+mkdir -p /home/$USERNAME/.config/xfce4
+cp -r /tmp/configs/xfce4/* /home/$USERNAME/.config/xfce4/ || { echo "Failed to copy XFCE4 configuration."; exit 1; }
 
-# Clean up
-rm -rf /tmp/wallpapers.zip /tmp/wallpapers-main
-
-# Configure nitrogen to use wallpaper4.png
-mkdir -p /home/$USERNAME/.config/nitrogen
-cat << EOF4 > /home/$USERNAME/.config/nitrogen/bg-saved.cfg
-[xin_-1]
-file=/etc/wallpapers/wallpaper4.png
-mode=0
-bgcolor=#000000
-EOF4
-
-# Change ownership of nitrogen config
-chown -R $USERNAME:$USERNAME /home/$USERNAME/.config/nitrogen
+# Set ownership for the XFCE4 config
+chown -R $USERNAME:$USERNAME /home/$USERNAME/.config/xfce4
 
 # Download i3 config from GitHub
 echo "Downloading i3 config..."
@@ -179,6 +166,9 @@ mv /home/$USERNAME/.config/i3/i3-config /home/$USERNAME/.config/i3/config || { e
 
 # Set ownership for the i3 config
 chown -R $USERNAME:$USERNAME /home/$USERNAME/.config/i3
+
+# Clean up
+rm -rf /tmp/configs
 
 # Install GRUB
 echo "Installing GRUB..."
@@ -197,3 +187,4 @@ EOF
 echo "Unmounting and rebooting..."
 umount -R /mnt
 reboot
+
