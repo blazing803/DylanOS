@@ -97,7 +97,7 @@ pacstrap -K /mnt base linux linux-firmware base-devel sof-firmware \
     xfce4-places-plugin xfce4-sensors-plugin xfce4-weather-plugin \
     xfce4-clipman-plugin xfce4-notes-plugin firefox \
     openssh alacritty iwd wpa_supplicant plank picom \
-    pulseaudio NetworkManager dmidecode grub || { echo "Package installation failed."; exit 1; }
+    pulseaudio NetworkManager dmidecode grub nitrogen pcmanfm unzip efibootmgr || { echo "Package installation failed."; exit 1; }
 
 # Generate fstab
 echo "Generating fstab..."
