@@ -68,6 +68,14 @@ else
     exit 1
 fi
 
+# Check disk selection
+echo "You selected $DISK for installation. All data on this disk will be erased!"
+read -p "Are you sure you want to proceed? (yes/no): " CONFIRM
+if [[ "$CONFIRM" != "yes" ]]; then
+    echo "Installation aborted."
+    exit 1
+fi
+
 # Format partitions
 echo "Formatting partitions..."
 mkfs.fat -F32 "$EFI_PART"  # EFI partition
@@ -169,43 +177,32 @@ echo "ID_LIKE=arch" >> /etc/os-release
 echo "Cloning configuration from GitHub..."
 git clone https://github.com/blazing803/configs.git /tmp/configs || { echo "Failed to clone repository."; exit 1; }
 
-# Set up configuration directories
-declare -a CONFIG_DIRS=("xfce4" "i3" "plank" "nitrogen")
-for dir in "\${CONFIG_DIRS[@]}"; do
-    echo "Setting up \$dir configuration..."
-    mkdir -p /home/\$USERNAME/.config/\$dir
-    cp -r /tmp/configs/\$dir/* /home/\$USERNAME/.config/\$dir/ || { echo "Failed to copy \$dir configuration."; exit 1; }
-    chown -R \$USERNAME:\$USERNAME /home/\$USERNAME/.config/\$dir
+# Copy all configuration directories to .config for all users and root
+echo "Setting up configuration for all users..."
+CONFIG_SOURCE="/tmp/configs"
+
+# Copy for regular users
+for USER_HOME in /home/*; do
+    USERNAME=$(basename "$USER_HOME")
+    USER_CONFIG_DIR="$USER_HOME/.config"
+    
+    # Create the user's .config directory if it doesn't exist
+    mkdir -p "$USER_CONFIG_DIR"
+    
+    # Copy all subdirectories from the configs repo to the user's .config
+    cp -r "$CONFIG_SOURCE/"* "$USER_CONFIG_DIR/" || { echo "Failed to copy configurations to $USER_CONFIG_DIR"; exit 1; }
+    
+    # Set ownership to the user
+    chown -R "$USERNAME:$USERNAME" "$USER_CONFIG_DIR"
 done
 
-# Clone the icons repository
-echo "Cloning icons repository..."
-git clone https://github.com/blazing803/icons.git /tmp/icons || { echo "Failed to clone icons repository."; exit 1; }
+# Copy configuration for the root user
+ROOT_CONFIG_DIR="/root/.config"
+mkdir -p "$ROOT_CONFIG_DIR"
+cp -r "$CONFIG_SOURCE/"* "$ROOT_CONFIG_DIR/" || { echo "Failed to copy configurations to $ROOT_CONFIG_DIR"; exit 1; }
 
-# Copy the DyOS icon to the pixmaps directory
-echo "Copying DyOS icon to /usr/share/pixmaps..."
-cp /tmp/icons/DyOS-icon.png /usr/share/pixmaps/ || { echo "Failed to copy DyOS icon."; exit 1; }
-
-# Set permissions to ensure everyone can use DyOS-icon.png
-chmod 644 /usr/share/pixmaps/DyOS-icon.png || { echo "Failed to set permissions for DyOS icon."; exit 1; }
-
-# Download wallpapers from GitHub
-echo "Downloading wallpapers..."
-git clone https://github.com/blazing803/wallpapers /tmp/wallpapers || { echo "Failed to clone wallpapers repository."; exit 1; }
-
-# Ensure the wallpapers directory exists
-echo "Ensuring the directory /usr/share/backgrounds exists..."
-mkdir -p /usr/share/backgrounds/
-
-# Copy wallpapers to /usr/share/backgrounds/
-echo "Copying wallpapers to /usr/share/backgrounds..."
-cp -r /tmp/wallpapers/* /usr/share/backgrounds/ || { echo "Failed to copy wallpapers."; exit 1; }
-
-# Set permissions for wallpapers
-chmod -R 644 /usr/share/backgrounds/* || { echo "Failed to set permissions for wallpapers."; exit 1; }
-
-# Clean up
-rm -rf /tmp/configs /tmp/wallpapers /tmp/icons
+# Clean up the cloned configuration repository
+rm -rf /tmp/configs
 
 # Install GRUB
 echo "Installing GRUB..."
