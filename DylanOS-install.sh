@@ -20,39 +20,7 @@ sleep 3
 
 # User Input Variables
 read -p "Enter the disk (e.g., /dev/nvme0n1 or /dev/sda): " DISK
-read -p "Is this an NVMe disk? (yes/no): " NVME_RESPONSE
-USE_NVME=${NVME_RESPONSE,,} # Lowercase the response
-
-# Define partition variables based on NVMe detection
-if [[ "$USE_NVME" == "yes" || "$USE_NVME" == "y" ]]; then
-    EFI_PART="${DISK}p1"
-    SWAP_PART="${DISK}p2"
-    ROOT_PART="${DISK}p3"
-else
-    EFI_PART="${DISK}1"
-    SWAP_PART="${DISK}2"
-    ROOT_PART="${DISK}3"
-fi
-
-# Set partition sizes
-EFI_SIZE="1G"
-SWAP_SIZE="4G"
-
-# Prompt for root password
-read -sp "Enter root password: " ROOT_PASSWORD
-echo  # For a new line after password input
-
-# Prompt for username and password
-read -p "Enter username: " USERNAME
-read -sp "Enter user password: " USER_PASSWORD
-echo  # For a new line after password input
-
-# Prompt for timezone with a default value
-read -p "Enter your timezone (default: America/New_York): " TIMEZONE
-TIMEZONE=${TIMEZONE:-America/New_York}  # Use default if no input is given
-
-LOCALE="en_US.UTF-8"  # Change to your preferred locale
-KEYMAP="us"  # Change to your preferred keymap
+read -p "Choose partitioning method (1: Automatic, 2: Manual): " PARTITIONING_METHOD
 
 # Check for root privileges
 if [[ $EUID -ne 0 ]]; then
@@ -63,28 +31,55 @@ fi
 # Update system clock
 timedatectl set-ntp true
 
-# Partition the disk using cfdisk
-echo "Partitioning the disk with cfdisk..."
-cfdisk "$DISK"
+if [[ "$PARTITIONING_METHOD" == "1" ]]; then
+    echo "Automatically partitioning the disk using fdisk..."
+    
+    # Use fdisk to create partitions in one-liner
+    echo -e "g\nn\n\n\n+1G\nt\n1\nn\n\n+4G\nt\n2\nn\n\n\n\nw" | fdisk "$DISK"
 
-# Inform user about the partitioning
-echo "You need to create three partitions:"
-echo "1. EFI partition (1G) - Format: FAT32"
-echo "2. Swap partition (4G) - Format: Linux swap"
-echo "3. Root partition (remaining space) - Format: ext4"
+    # Define partition variables
+    if [[ "$DISK" == /dev/nvme* ]]; then
+        EFI_PART="${DISK}p1"
+        SWAP_PART="${DISK}p2"
+        ROOT_PART="${DISK}p3"
+    else
+        EFI_PART="${DISK}1"
+        SWAP_PART="${DISK}2"
+        ROOT_PART="${DISK}3"
+    fi
+
+elif [[ "$PARTITIONING_METHOD" == "2" ]]; then
+    echo "You chose manual partitioning."
+    # Manual partitioning using cfdisk
+    cfdisk "$DISK"
+    
+    # Define partition variables after manual partitioning
+    if [[ "$DISK" == /dev/nvme* ]]; then
+        EFI_PART="${DISK}p1"
+        SWAP_PART="${DISK}p2"
+        ROOT_PART="${DISK}p3"
+    else
+        EFI_PART="${DISK}1"
+        SWAP_PART="${DISK}2"
+        ROOT_PART="${DISK}3"
+    fi
+else
+    echo "Invalid option selected. Exiting."
+    exit 1
+fi
 
 # Format partitions
 echo "Formatting partitions..."
-mkfs.fat -F32 $EFI_PART  # EFI partition
-mkswap $SWAP_PART         # Swap partition
-mkfs.ext4 $ROOT_PART      # Root partition (the rest of the disk)
+mkfs.fat -F32 "$EFI_PART"  # EFI partition
+mkswap "$SWAP_PART"         # Swap partition
+mkfs.ext4 "$ROOT_PART"      # Root partition (the rest of the disk)
 
 # Mount filesystem
 echo "Mounting filesystem..."
-mount $ROOT_PART /mnt
+mount "$ROOT_PART" /mnt
 mkdir -p /mnt/boot
-mount $EFI_PART /mnt/boot  # Mount EFI partition
-swapon $SWAP_PART           # Enable swap
+mount "$EFI_PART" /mnt/boot  # Mount EFI partition
+swapon "$SWAP_PART"           # Enable swap
 
 # Install essential packages
 echo "Installing essential packages..."
@@ -110,13 +105,21 @@ genfstab -U /mnt >> /mnt/etc/fstab
 echo "Entering new system..."
 arch-chroot /mnt /bin/bash <<EOF
 
-# Set root password
-echo "Setting root password..."
-echo "root:$ROOT_PASSWORD" | chpasswd
+# Prompt for root password
+read -sp "Enter root password: " ROOT_PASSWORD
+echo
 
 # Create a new user
-useradd -m -G wheel "$USERNAME"
-echo "$USERNAME:$USER_PASSWORD" | chpasswd
+read -p "Enter username: " USERNAME
+read -sp "Enter user password: " USER_PASSWORD
+echo
+
+# Set root password
+echo "Setting root password..."
+echo "root:\$ROOT_PASSWORD" | chpasswd
+
+useradd -m -G wheel "\$USERNAME"
+echo "\$USERNAME:\$USER_PASSWORD" | chpasswd
 
 # Set hostname
 HOSTNAME=\$(dmidecode -s system-product-name)
@@ -126,11 +129,13 @@ echo "\$HOSTNAME" > /etc/hostname
 systemctl enable lightdm
 systemctl enable wpa_supplicant
 systemctl enable iwd
-systemctl --user enable pipewire
-systemctl --user enable pipewire-pulse
-systemctl --user enable wireplumber
 systemctl enable NetworkManager
 systemctl enable sshd
+
+# Enable services for user sessions
+systemctl --user enable --now pipewire
+systemctl --user enable --now pipewire-pulse
+systemctl --user enable --now wireplumber
 
 # Ensure PipeWire is used as the default sound server
 mkdir -p /etc/pipewire
@@ -142,12 +147,8 @@ context.modules = [
 ]
 EOL
 
-# Enable systemd user services for PipeWire
-systemctl --user enable --now pipewire
-systemctl --user enable --now pipewire-pulse
-
 # Set timezone
-ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
+ln -sf /usr/share/zoneinfo/America/New_York /etc/localtime
 hwclock --systohc
 
 # Localization
@@ -156,7 +157,7 @@ locale-gen
 echo "LANG=en_US.UTF-8" > /etc/locale.conf
 
 # Keymap configuration
-echo "KEYMAP=$KEYMAP" > /etc/vconsole.conf
+echo "KEYMAP=us" > /etc/vconsole.conf
 
 # Update /etc/os-release
 echo "NAME=\"DylanOS\"" > /etc/os-release
@@ -164,18 +165,29 @@ echo "VERSION=\"4.0\"" >> /etc/os-release
 echo "ID=dylanos" >> /etc/os-release
 echo "ID_LIKE=arch" >> /etc/os-release
 
-# Download configuration from GitHub once
+# Clone configuration from GitHub
 echo "Cloning configuration from GitHub..."
 git clone https://github.com/blazing803/configs.git /tmp/configs || { echo "Failed to clone repository."; exit 1; }
 
 # Set up configuration directories
 declare -a CONFIG_DIRS=("xfce4" "i3" "plank" "nitrogen")
-for dir in "${CONFIG_DIRS[@]}"; do
-    echo "Setting up $dir configuration..."
-    mkdir -p /home/$USERNAME/.config/$dir
-    cp -r /tmp/configs/$dir/* /home/$USERNAME/.config/$dir/ || { echo "Failed to copy $dir configuration."; exit 1; }
-    chown -R $USERNAME:$USERNAME /home/$USERNAME/.config/$dir
+for dir in "\${CONFIG_DIRS[@]}"; do
+    echo "Setting up \$dir configuration..."
+    mkdir -p /home/\$USERNAME/.config/\$dir
+    cp -r /tmp/configs/\$dir/* /home/\$USERNAME/.config/\$dir/ || { echo "Failed to copy \$dir configuration."; exit 1; }
+    chown -R \$USERNAME:\$USERNAME /home/\$USERNAME/.config/\$dir
 done
+
+# Clone the icons repository
+echo "Cloning icons repository..."
+git clone https://github.com/blazing803/icons.git /tmp/icons || { echo "Failed to clone icons repository."; exit 1; }
+
+# Copy the DyOS icon to the pixmaps directory
+echo "Copying DyOS icon to /usr/share/pixmaps..."
+cp /tmp/icons/DyOS-icon.png /usr/share/pixmaps/ || { echo "Failed to copy DyOS icon."; exit 1; }
+
+# Set permissions to ensure everyone can use DyOS-icon.png
+chmod 644 /usr/share/pixmaps/DyOS-icon.png || { echo "Failed to set permissions for DyOS icon."; exit 1; }
 
 # Download wallpapers from GitHub
 echo "Downloading wallpapers..."
@@ -189,8 +201,11 @@ mkdir -p /usr/share/backgrounds/
 echo "Copying wallpapers to /usr/share/backgrounds..."
 cp -r /tmp/wallpapers/* /usr/share/backgrounds/ || { echo "Failed to copy wallpapers."; exit 1; }
 
+# Set permissions for wallpapers
+chmod -R 644 /usr/share/backgrounds/* || { echo "Failed to set permissions for wallpapers."; exit 1; }
+
 # Clean up
-rm -rf /tmp/configs /tmp/wallpapers
+rm -rf /tmp/configs /tmp/wallpapers /tmp/icons
 
 # Install GRUB
 echo "Installing GRUB..."
