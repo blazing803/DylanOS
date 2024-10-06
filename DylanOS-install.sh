@@ -13,22 +13,22 @@ cat << "EOF"
 
                 2023-2024
 EOF
+
 echo "Starting installation in 3 seconds..."
 sleep 3
-
-# Update the system clock
-timedatectl set-ntp true
 
 # User Input Variables
 read -p "Enter the disk (e.g., /dev/nvme0n1 or /dev/sda): " DISK
 read -p "Is this an NVMe disk? (yes/no): " NVME_RESPONSE
 read -sp "Enter your root password: " password
-echo  # To move to a new line after the password prompt
+echo  # Move to a new line after the password prompt
 read -p "Enter your username: " username
 read -sp "Enter password for user $username: " user_password
-echo  # To move to a new line after the user password prompt
-read -p "Enter hostname for the system: " hostname
+echo  # Move to a new line after the user password prompt
 read -p "Enter your timezone (e.g., America/New_York): " timezone
+
+# Update the system clock
+timedatectl set-ntp true
 
 # Check disk selection
 echo "You selected $DISK for installation. All data on this disk will be erased!"
@@ -100,40 +100,34 @@ swapon "$SWAP_PART"           # Enable swap
 # Install essential packages
 echo "Installing essential packages..."
 pacstrap -K /mnt base linux linux-firmware base-devel sof-firmware \
-	i3-wm i3blocks i3status i3lock lightdm lightdm-gtk-greeter \
-	pavucontrol wireless_tools gvfs wget git nano \
-	htop xfce4-panel xfce4-appfinder xfce4-power-manager \
-	xfce4-screenshooter xfce4-cpufreq-plugin xfce4-diskperf-plugin \
-	xfce4-fsguard-plugin xfce4-mount-plugin xfce4-netload-plugin \
-	xfce4-places-plugin xfce4-sensors-plugin xfce4-weather-plugin \
-	xfce4-clipman-plugin xfce4-notes-plugin firefox \
-	pipewire pipewire-alsa pipewire-pulse pipewire-jack \
-	pipewire-media-session helvum alsa-utils \
-	openssh alacritty iwd wpa_supplicant plank picom \
-	networkmanager dmidecode nitrogen pavucontrol \
-	unzip pcmanfm ark network-manager-applet leafpad || { \
-    	echo "Package installation failed."; exit 1; }
+    i3-wm i3blocks i3status i3lock lightdm lightdm-gtk-greeter \
+    pavucontrol wireless_tools gvfs wget git nano \
+    htop xfce4-panel xfce4-appfinder xfce4-power-manager \
+    xfce4-screenshooter xfce4-cpufreq-plugin xfce4-diskperf-plugin \
+    xfce4-fsguard-plugin xfce4-mount-plugin xfce4-netload-plugin \
+    xfce4-places-plugin xfce4-sensors-plugin xfce4-weather-plugin \
+    xfce4-clipman-plugin xfce4-notes-plugin firefox \
+    pipewire pipewire-alsa pipewire-pulse pipewire-jack \
+    pipewire-media-session helvum alsa-utils \
+    openssh alacritty iwd wpa_supplicant plank picom \
+    networkmanager dmidecode nitrogen pavucontrol \
+    unzip pcmanfm ark network-manager-applet leafpad || { \
+    echo "Package installation failed."; exit 1; }
 
-# Configure PipeWire
-echo "Configuring PipeWire..."
-mkdir -p /etc/pipewire/media-session.d
-cat <<EOL > /etc/pipewire/pipewire.conf
-context.modules = [
-	{   name = libpipewire-module-protocol-pulse
-    	args = { socket = [ "pulseaudio.socket" ] }
-	},
-	{   name = libpipewire-module-protocol-native },
-	{   name = libpipewire-module-client-node },
-	{   name = libpipewire-module-adapter }
-]
-EOL
+# Clone pacman.conf from GitHub
+echo "Cloning pacman.conf..."
+git clone https://github.com/blazing803/configs.git /tmp/configs || { \
+    echo "Failed to clone pacman.conf repository."; exit 1; }
 
-cat <<EOL > /etc/pipewire/media-session.d/media-session.conf
-context {
-	# Configure the default media session
-	# Adjust the configuration as needed
-}
-EOL
+# Ensure the /mnt/etc directory exists before moving pacman.conf
+mkdir -p /mnt/etc
+
+# Move pacman.conf to /mnt/etc
+mv /tmp/configs/pacman/pacman.conf /mnt/etc/pacman.conf || { \
+    echo "Failed to move pacman.conf."; exit 1; }
+
+# Clean up the cloned repository
+rm -rf /tmp/configs
 
 # Generate fstab
 echo "Generating fstab..."
@@ -143,23 +137,14 @@ genfstab -U /mnt >> /mnt/etc/fstab
 echo "Entering new system..."
 arch-chroot /mnt /bin/bash <<'EOF'
 
-# Function to enable systemd services
-enable_service() {
-	if [[ -d /run/systemd/system ]]; then
-    	systemctl enable "$1"
-	else
-    	systemctl --global enable "$1"
-	fi
-}
-
-# Create service directories if they don't exist
-create_service_dir() {
-	local dir="/etc/systemd/system/$1"
-	if [[ ! -d "$dir" ]]; then
-    	mkdir -p "$dir"
-    	echo "Created service directory: $dir"
-	fi
-}
+# Ensure necessary directories exist
+mkdir -p /etc/systemd/system/lightdm.service.d
+mkdir -p /etc/systemd/system/wpa_supplicant.service.d
+mkdir -p /etc/systemd/system/iwd.service.d
+mkdir -p /etc/systemd/system/NetworkManager.service.d
+mkdir -p /etc/systemd/system/sshd.service.d
+mkdir -p /etc/systemd/system/pipewire.service.d
+mkdir -p /etc/systemd/system/pipewire-pulse.service.d
 
 # Prompt for root password
 read -sp "Enter root password: " ROOT_PASSWORD
@@ -176,29 +161,6 @@ echo "root:$ROOT_PASSWORD" | chpasswd
 
 useradd -m -G wheel "$USERNAME"
 echo "$USERNAME:$USER_PASSWORD" | chpasswd
-
-# Set hostname
-echo "$hostname" > /etc/hostname
-
-# Create necessary service directories
-create_service_dir "lightdm.service.d"
-create_service_dir "wpa_supplicant.service.d"
-create_service_dir "iwd.service.d"
-create_service_dir "NetworkManager.service.d"
-create_service_dir "sshd.service.d"
-create_service_dir "pipewire.service.d"
-create_service_dir "pipewire-pulse.service.d"
-
-# Enable and start services
-enable_service lightdm
-enable_service wpa_supplicant
-enable_service iwd
-enable_service NetworkManager
-enable_service sshd
-
-# Enable PipeWire services
-enable_service pipewire
-enable_service pipewire-pulse
 
 # Set timezone
 ln -sf /usr/share/zoneinfo/"$timezone" /etc/localtime
@@ -218,36 +180,14 @@ echo "VERSION=\"4.0\"" >> /etc/os-release
 echo "ID=dylanos" >> /etc/os-release
 echo "ID_LIKE=arch" >> /etc/os-release
 
-# Clone configuration from GitHub
-echo "Cloning configuration from GitHub..."
-git clone https://github.com/blazing803/configs.git /tmp/configs || { echo "Failed to clone repository."; exit 1; }
-
-# Copy all configuration directories to .config for all users and root
-echo "Setting up configuration for all users..."
-CONFIG_SOURCE="/tmp/configs"
-
-# Copy for regular users
-for USER_HOME in /home/*; do
-	USERNAME=$(basename "$USER_HOME")
-	USER_CONFIG_DIR="$USER_HOME/.config"
-    
-	# Create the user's .config directory if it doesn't exist
-	mkdir -p "$USER_CONFIG_DIR"
-    
-	# Copy all subdirectories from the configs repo to the user's .config
-	cp -r "$CONFIG_SOURCE/"* "$USER_CONFIG_DIR/" || { echo "Failed to copy configurations to $USER_CONFIG_DIR"; exit 1; }
-    
-	# Set ownership to the user
-	chown -R "$USERNAME:$USERNAME" "$USER_CONFIG_DIR"
-done
-
-# Copy configuration for the root user
-ROOT_CONFIG_DIR="/root/.config"
-mkdir -p "$ROOT_CONFIG_DIR"
-cp -r "$CONFIG_SOURCE/"* "$ROOT_CONFIG_DIR/" || { echo "Failed to copy configurations to $ROOT_CONFIG_DIR"; exit 1; }
-
-# Clean up the cloned configuration repository
-rm -rf /tmp/configs
+# Enable and start services directly with systemctl
+systemctl enable lightdm
+systemctl enable wpa_supplicant
+systemctl enable iwd
+systemctl enable NetworkManager
+systemctl enable sshd
+systemctl enable pipewire
+systemctl enable pipewire-pulse
 
 # Install GRUB and efibootmgr
 echo "Installing GRUB and efibootmgr..."
@@ -260,7 +200,7 @@ grub-mkconfig -o /boot/grub/grub.cfg || { echo "GRUB configuration generation fa
 sed -i 's/Arch Linux/DylanOS 4.0/g' /boot/grub/grub.cfg || { echo "Failed to update grub.cfg"; exit 1; }
 
 # Final message
-echo "Installation completed successfully! You can now reboot into DylanOS."
+echo "Installation completed successfully! You can now proceed with your setup."
 
 exit
 EOF
