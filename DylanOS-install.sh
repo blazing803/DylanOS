@@ -89,7 +89,7 @@ mkdir -p /mnt/boot
 mount "$EFI_PART" /mnt/boot  # Mount EFI partition
 swapon "$SWAP_PART"           # Enable swap
 
-# Install essential packages including PipeWire components
+# Install essential packages
 echo "Installing essential packages..."
 pacstrap -K /mnt base linux linux-firmware base-devel sof-firmware \
     i3-wm i3blocks i3status i3lock lightdm lightdm-gtk-greeter \
@@ -108,7 +108,7 @@ pacstrap -K /mnt base linux linux-firmware base-devel sof-firmware \
 
 # Configure PipeWire
 echo "Configuring PipeWire..."
-mkdir -p /etc/pipewire
+mkdir -p /etc/pipewire/media-session.d
 cat <<EOL > /etc/pipewire/pipewire.conf
 context.modules = [
     {   name = libpipewire-module-protocol-pulse
@@ -124,7 +124,6 @@ cat <<EOL > /etc/pipewire/media-session.d/media-session.conf
 context {
     # Configure the default media session
     # Adjust the configuration as needed
-    ...
 }
 EOL
 
@@ -134,7 +133,7 @@ genfstab -U /mnt >> /mnt/etc/fstab
 
 # Chroot into the new system
 echo "Entering new system..."
-arch-chroot /mnt /bin/bash <<EOF
+arch-chroot /mnt /bin/bash <<'EOF'
 
 # Function to enable systemd services
 enable_service() {
@@ -142,6 +141,15 @@ enable_service() {
         systemctl enable "$1"
     else
         systemctl --global enable "$1"
+    fi
+}
+
+# Create service directories if they don't exist
+create_service_dir() {
+    local dir="/etc/systemd/system/$1"
+    if [[ ! -d "$dir" ]]; then
+        mkdir -p "$dir"
+        echo "Created service directory: $dir"
     fi
 }
 
@@ -164,6 +172,15 @@ echo "\$USERNAME:\$USER_PASSWORD" | chpasswd
 # Set hostname
 HOSTNAME=\$(dmidecode -s system-product-name)
 echo "\$HOSTNAME" > /etc/hostname
+
+# Create necessary service directories
+create_service_dir "lightdm.service.d"
+create_service_dir "wpa_supplicant.service.d"
+create_service_dir "iwd.service.d"
+create_service_dir "NetworkManager.service.d"
+create_service_dir "sshd.service.d"
+create_service_dir "pipewire.service.d"
+create_service_dir "pipewire-pulse.service.d"
 
 # Enable and start services
 enable_service lightdm
@@ -241,6 +258,6 @@ EOF
 # Unmount and reboot
 echo "Unmounting and rebooting..."
 umount -R /mnt
+echo "Rebooting..."
 reboot
-
 
