@@ -103,7 +103,7 @@ pacstrap -K /mnt base linux linux-firmware base-devel sof-firmware \
     pipewire-media-session helvum alsa-utils \
     openssh alacritty iwd wpa_supplicant plank picom \
     networkmanager dmidecode grub nitrogen pavucontrol \
-    unzip efibootmgr pacmanfm ark network-manager-applet leafpad || { \
+    unzip efibootmgr pcmanfm ark network-manager-applet leafpad || { \
         echo "Package installation failed."; exit 1; }
 
 # Configure PipeWire
@@ -227,5 +227,20 @@ rm -rf /tmp/configs
 
 # Install GRUB
 echo "Installing GRUB..."
-# Add GRUB installation commands here...
+grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=DylanOS || { echo "GRUB installation failed."; exit 1; }
+
+# Generate GRUB configuration file
+echo "Generating GRUB configuration..."
+grub-mkconfig -o /boot/grub/grub.cfg || { echo "GRUB configuration generation failed."; exit 1; }
+
+# Change "Arch Linux" to "DylanOS 4.0" in grub.cfg
+sed -i 's/Arch Linux/DylanOS 4.0/g' /boot/grub/grub.cfg || { echo "Failed to update grub.cfg"; exit 1; }
+
 EOF
+
+# Unmount and reboot
+echo "Unmounting and rebooting..."
+umount -R /mnt
+reboot
+
+
