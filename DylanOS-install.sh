@@ -2,128 +2,132 @@
 
 # ASCII Art for DylanOS 4.0
 cat << "EOF"
-  _____        _              ____   _____   _  _    ___  
- |  __ \      | |            / __ \ / ____| | || |  / _ \ 
+  _____    	_          	____   _____   _  _	___  
+ |  __ \  	| |        	/ __ \ / ____| | || |  / _ \
  | |  | |_   _| | __ _ _ __ | |  | | (___   | || |_| | | |
  | |  | | | | | |/ _` | '_ \| |  | |\___ \  |__   _| | | |
- | |__| | |_| | | (_| | | | | |__| |____) |    | |_| |_| |
- |_____/ \__, |_|\__,_|_| |_|\____/|_____/     |_(_)\___/ 
-          __/ |                                           
-         |___/                                            
+ | |__| | |_| | | (_| | | | | |__| |____) |	| |_| |_| |
+ |_____/ \__, |_|\__,_|_| |_|\____/|_____/ 	|_(_)\___/
+      	__/ |                                      	 
+     	|___/                                       	 
 
-                2023-2024
+            	2023-2024
 EOF
 
 # Wait for 3 seconds
 echo "Starting installation in 3 seconds..."
 sleep 3
 
+# Update the system clock
+timedatectl set-ntp true
+
 # User Input Variables
 read -p "Enter the disk (e.g., /dev/nvme0n1 or /dev/sda): " DISK
-read -p "Choose partitioning method (1: Automatic, 2: Manual): " PARTITIONING_METHOD
-
-# Check for root privileges
-if [[ $EUID -ne 0 ]]; then
-    echo "This script must be run as root" 
-    exit 1
-fi
+read -p "Is this an NVMe disk? (yes/no): " NVME_RESPONSE
+read -sp "Enter your root password: " password
+echo  # To move to a new line after the password prompt
+read -p "Enter your username: " username
+read -sp "Enter password for user \$username: " user_password
+echo  # To move to a new line after the user password prompt
+read -p "Enter hostname for the system: " hostname
+read -p "Enter your timezone (e.g., America/New_York): " timezone
 
 # Update system clock
 timedatectl set-ntp true
 
 if [[ "$PARTITIONING_METHOD" == "1" ]]; then
-    echo "Automatically partitioning the disk using fdisk..."
+	echo "Automatically partitioning the disk using fdisk..."
     
-    # Use fdisk to create partitions in one-liner
-    echo -e "g\nn\n\n\n+1G\nt\n1\nn\n\n+4G\nt\n2\nn\n\n\n\nw" | fdisk "$DISK"
+	# Use fdisk to create partitions in one-liner
+	echo -e "g\nn\n\n\n+1G\nt\n1\nn\n\n+4G\nt\n2\nn\n\n\n\nw" | fdisk "$DISK"
 
-    # Define partition variables
-    if [[ "$DISK" == /dev/nvme* ]]; then
-        EFI_PART="${DISK}p1"
-        SWAP_PART="${DISK}p2"
-        ROOT_PART="${DISK}p3"
-    else
-        EFI_PART="${DISK}1"
-        SWAP_PART="${DISK}2"
-        ROOT_PART="${DISK}3"
-    fi
+	# Define partition variables
+	if [[ "$DISK" == /dev/nvme* ]]; then
+    	EFI_PART="${DISK}p1"
+    	SWAP_PART="${DISK}p2"
+    	ROOT_PART="${DISK}p3"
+	else
+    	EFI_PART="${DISK}1"
+    	SWAP_PART="${DISK}2"
+    	ROOT_PART="${DISK}3"
+	fi
 
 elif [[ "$PARTITIONING_METHOD" == "2" ]]; then
-    echo "You chose manual partitioning."
-    # Manual partitioning using cfdisk
-    cfdisk "$DISK"
+	echo "You chose manual partitioning."
+	# Manual partitioning using cfdisk
+	cfdisk "$DISK"
     
-    # Define partition variables after manual partitioning
-    if [[ "$DISK" == /dev/nvme* ]]; then
-        EFI_PART="${DISK}p1"
-        SWAP_PART="${DISK}p2"
-        ROOT_PART="${DISK}p3"
-    else
-        EFI_PART="${DISK}1"
-        SWAP_PART="${DISK}2"
-        ROOT_PART="${DISK}3"
-    fi
+	# Define partition variables after manual partitioning
+	if [[ "$DISK" == /dev/nvme* ]]; then
+    	EFI_PART="${DISK}p1"
+    	SWAP_PART="${DISK}p2"
+    	ROOT_PART="${DISK}p3"
+	else
+    	EFI_PART="${DISK}1"
+    	SWAP_PART="${DISK}2"
+    	ROOT_PART="${DISK}3"
+	fi
 else
-    echo "Invalid option selected. Exiting."
-    exit 1
+	echo "Invalid option selected. Exiting."
+	exit 1
 fi
 
 # Check disk selection
 echo "You selected $DISK for installation. All data on this disk will be erased!"
 read -p "Are you sure you want to proceed? (yes/no): " CONFIRM
 if [[ "$CONFIRM" != "yes" ]]; then
-    echo "Installation aborted."
-    exit 1
+	echo "Installation aborted."
+	exit 1
 fi
 
 # Format partitions
 echo "Formatting partitions..."
 mkfs.fat -F32 "$EFI_PART"  # EFI partition
-mkswap "$SWAP_PART"         # Swap partition
-mkfs.ext4 "$ROOT_PART"      # Root partition (the rest of the disk)
+mkswap "$SWAP_PART"     	# Swap partition
+mkfs.ext4 "$ROOT_PART"  	# Root partition (the rest of the disk)
 
 # Mount filesystem
 echo "Mounting filesystem..."
 mount "$ROOT_PART" /mnt
 mkdir -p /mnt/boot
 mount "$EFI_PART" /mnt/boot  # Mount EFI partition
-swapon "$SWAP_PART"           # Enable swap
+swapon "$SWAP_PART"       	# Enable swap
 
 # Install essential packages
 echo "Installing essential packages..."
 pacstrap -K /mnt base linux linux-firmware base-devel sof-firmware \
-    i3-wm i3blocks i3status i3lock lightdm lightdm-gtk-greeter \
-    pavucontrol wireless_tools gvfs wget git nano \
-    htop xfce4-panel xfce4-appfinder xfce4-power-manager \
-    xfce4-screenshooter xfce4-cpufreq-plugin xfce4-diskperf-plugin \
-    xfce4-fsguard-plugin xfce4-mount-plugin xfce4-netload-plugin \
-    xfce4-places-plugin xfce4-sensors-plugin xfce4-weather-plugin \
-    xfce4-clipman-plugin xfce4-notes-plugin firefox \
-    pipewire pipewire-alsa pipewire-pulse pipewire-jack \
-    pipewire-media-session helvum alsa-utils \
-    openssh alacritty iwd wpa_supplicant plank picom \
-    networkmanager dmidecode grub nitrogen pavucontrol \
-    unzip efibootmgr pcmanfm ark network-manager-applet leafpad || { \
-        echo "Package installation failed."; exit 1; }
+	i3-wm i3blocks i3status i3lock lightdm lightdm-gtk-greeter \
+	pavucontrol wireless_tools gvfs wget git nano \
+	htop xfce4-panel xfce4-appfinder xfce4-power-manager \
+	xfce4-screenshooter xfce4-cpufreq-plugin xfce4-diskperf-plugin \
+	xfce4-fsguard-plugin xfce4-mount-plugin xfce4-netload-plugin \
+	xfce4-places-plugin xfce4-sensors-plugin xfce4-weather-plugin \
+	xfce4-clipman-plugin xfce4-notes-plugin firefox \
+	pipewire pipewire-alsa pipewire-pulse pipewire-jack \
+	pipewire-media-session helvum alsa-utils \
+	openssh alacritty iwd wpa_supplicant plank picom \
+	networkmanager dmidecode nitrogen pavucontrol \
+	unzip pcmanfm ark network-manager-applet leafpad || { \
+    	echo "Package installation failed."; exit 1; }
 
 # Configure PipeWire
 echo "Configuring PipeWire..."
 mkdir -p /etc/pipewire/media-session.d
 cat <<EOL > /etc/pipewire/pipewire.conf
 context.modules = [
-    {   name = libpipewire-module-protocol-pulse
-        args = { socket = [ "pulseaudio.socket" ] }
-    },
-    {   name = libpipewire-module-protocol-native },
-    {   name = libpipewire-module-client-node },
-    {   name = libpipewire-module-adapter }
+	{   name = libpipewire-module-protocol-pulse
+    	args = { socket = [ "pulseaudio.socket" ] }
+	},
+	{   name = libpipewire-module-protocol-native },
+	{   name = libpipewire-module-client-node },
+	{   name = libpipewire-module-adapter }
 ]
 EOL
 
 cat <<EOL > /etc/pipewire/media-session.d/media-session.conf
 context {
-    # Configure the default media session
-    # Adjust the configuration as needed
+	# Configure the default media session
+	# Adjust the configuration as needed
 }
 EOL
 
@@ -137,20 +141,20 @@ arch-chroot /mnt /bin/bash <<'EOF'
 
 # Function to enable systemd services
 enable_service() {
-    if [[ -d /run/systemd/system ]]; then
-        systemctl enable "$1"
-    else
-        systemctl --global enable "$1"
-    fi
+	if [[ -d /run/systemd/system ]]; then
+    	systemctl enable "$1"
+	else
+    	systemctl --global enable "$1"
+	fi
 }
 
 # Create service directories if they don't exist
 create_service_dir() {
-    local dir="/etc/systemd/system/$1"
-    if [[ ! -d "$dir" ]]; then
-        mkdir -p "$dir"
-        echo "Created service directory: $dir"
-    fi
+	local dir="/etc/systemd/system/$1"
+	if [[ ! -d "$dir" ]]; then
+    	mkdir -p "$dir"
+    	echo "Created service directory: $dir"
+	fi
 }
 
 # Prompt for root password
@@ -221,17 +225,17 @@ CONFIG_SOURCE="/tmp/configs"
 
 # Copy for regular users
 for USER_HOME in /home/*; do
-    USERNAME=$(basename "$USER_HOME")
-    USER_CONFIG_DIR="$USER_HOME/.config"
+	USERNAME=$(basename "$USER_HOME")
+	USER_CONFIG_DIR="$USER_HOME/.config"
     
-    # Create the user's .config directory if it doesn't exist
-    mkdir -p "$USER_CONFIG_DIR"
+	# Create the user's .config directory if it doesn't exist
+	mkdir -p "$USER_CONFIG_DIR"
     
-    # Copy all subdirectories from the configs repo to the user's .config
-    cp -r "$CONFIG_SOURCE/"* "$USER_CONFIG_DIR/" || { echo "Failed to copy configurations to $USER_CONFIG_DIR"; exit 1; }
+	# Copy all subdirectories from the configs repo to the user's .config
+	cp -r "$CONFIG_SOURCE/"* "$USER_CONFIG_DIR/" || { echo "Failed to copy configurations to $USER_CONFIG_DIR"; exit 1; }
     
-    # Set ownership to the user
-    chown -R "$USERNAME:$USERNAME" "$USER_CONFIG_DIR"
+	# Set ownership to the user
+	chown -R "$USERNAME:$USERNAME" "$USER_CONFIG_DIR"
 done
 
 # Copy configuration for the root user
@@ -242,22 +246,21 @@ cp -r "$CONFIG_SOURCE/"* "$ROOT_CONFIG_DIR/" || { echo "Failed to copy configura
 # Clean up the cloned configuration repository
 rm -rf /tmp/configs
 
+
+
+# Install GRUB and efibootmgr
+echo "Installing GRUB and efibootmgr..."
+arch-chroot /mnt pacman -Sy grub efibootmgr || { echo "GRUB and efibootmgr installation failed."; exit 1; }
+
 # Install GRUB
 echo "Installing GRUB..."
 grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=DylanOS || { echo "GRUB installation failed."; exit 1; }
-
-# Generate GRUB configuration file
-echo "Generating GRUB configuration..."
 grub-mkconfig -o /boot/grub/grub.cfg || { echo "GRUB configuration generation failed."; exit 1; }
-
-# Change "Arch Linux" to "DylanOS 4.0" in grub.cfg
 sed -i 's/Arch Linux/DylanOS 4.0/g' /boot/grub/grub.cfg || { echo "Failed to update grub.cfg"; exit 1; }
 
-EOF
+# Final message
+echo "Installation completed successfully! You can now reboot into DylanOS."
 
-# Unmount and reboot
-echo "Unmounting and rebooting..."
-umount -R /mnt
-echo "Rebooting..."
-reboot
+exit
+
 
