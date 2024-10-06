@@ -2,19 +2,17 @@
 
 # ASCII Art for DylanOS 4.0
 cat << "EOF"
-  _____    	_          	____   _____   _  _	___  
- |  __ \  	| |        	/ __ \ / ____| | || |  / _ \
+  _____        _              ____   _____   _  _    ___  
+ |  __ \      | |            / __ \ / ____| | || |  / _ \ 
  | |  | |_   _| | __ _ _ __ | |  | | (___   | || |_| | | |
  | |  | | | | | |/ _` | '_ \| |  | |\___ \  |__   _| | | |
- | |__| | |_| | | (_| | | | | |__| |____) |	| |_| |_| |
- |_____/ \__, |_|\__,_|_| |_|\____/|_____/ 	|_(_)\___/
-      	__/ |                                      	 
-     	|___/                                       	 
+ | |__| | |_| | | (_| | | | | |__| |____) |    | |_| |_| |
+ |_____/ \__, |_|\__,_|_| |_|\____/|_____/     |_(_)\___/ 
+          __/ |                                           
+         |___/                                            
 
-            	2023-2024
+                2023-2024
 EOF
-
-# Wait for 3 seconds
 echo "Starting installation in 3 seconds..."
 sleep 3
 
@@ -38,10 +36,17 @@ timedatectl set-ntp true
 if [[ "$PARTITIONING_METHOD" == "1" ]]; then
 	echo "Automatically partitioning the disk using fdisk..."
     
-	# Use fdisk to create partitions in one-liner
-	echo -e "g\nn\n\n\n+1G\nt\n1\nn\n\n+4G\nt\n2\nn\n\n\n\nw" | fdisk "$DISK"
+	# Partition the disk using fdisk
+echo "Partitioning the disk with fdisk..."
+if ! fdisk "$DISK" <<< $'g\nn\n\n\n+'"$EFI_SIZE"'\nt\n1\nn\n\n+'"$SWAP_SIZE"'\nt\n2\nn\n\n\n\nw' 2>&1; then
+    echo "fdisk failed. Attempting to partition with parted..."
+    parted "$DISK" mklabel gpt
+    parted "$DISK" mkpart primary fat32 1MiB "$EFI_SIZE"
+    parted "$DISK" mkpart primary linux-swap "$EFI_SIZE" "$SWAP_SIZE"
+    parted "$DISK" mkpart primary ext4 "$SWAP_SIZE" 100% || { echo "Parted partitioning failed."; exit 1; }
+fi
 
-	# Define partition variables
+        # Define partition variables
 	if [[ "$DISK" == /dev/nvme* ]]; then
     	EFI_PART="${DISK}p1"
     	SWAP_PART="${DISK}p2"
