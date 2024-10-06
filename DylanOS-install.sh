@@ -25,78 +25,77 @@ read -p "Is this an NVMe disk? (yes/no): " NVME_RESPONSE
 read -sp "Enter your root password: " password
 echo  # To move to a new line after the password prompt
 read -p "Enter your username: " username
-read -sp "Enter password for user \$username: " user_password
+read -sp "Enter password for user $username: " user_password
 echo  # To move to a new line after the user password prompt
 read -p "Enter hostname for the system: " hostname
 read -p "Enter your timezone (e.g., America/New_York): " timezone
-
-# Update system clock
-timedatectl set-ntp true
-
-if [[ "$PARTITIONING_METHOD" == "1" ]]; then
-	echo "Automatically partitioning the disk using fdisk..."
-    
-	# Partition the disk using fdisk
-echo "Partitioning the disk with fdisk..."
-if ! fdisk "$DISK" <<< $'g\nn\n\n\n+'"$EFI_SIZE"'\nt\n1\nn\n\n+'"$SWAP_SIZE"'\nt\n2\nn\n\n\n\nw' 2>&1; then
-    echo "fdisk failed. Attempting to partition with parted..."
-    parted "$DISK" mklabel gpt
-    parted "$DISK" mkpart primary fat32 1MiB "$EFI_SIZE"
-    parted "$DISK" mkpart primary linux-swap "$EFI_SIZE" "$SWAP_SIZE"
-    parted "$DISK" mkpart primary ext4 "$SWAP_SIZE" 100% || { echo "Parted partitioning failed."; exit 1; }
-fi
-
-        # Define partition variables
-	if [[ "$DISK" == /dev/nvme* ]]; then
-    	EFI_PART="${DISK}p1"
-    	SWAP_PART="${DISK}p2"
-    	ROOT_PART="${DISK}p3"
-	else
-    	EFI_PART="${DISK}1"
-    	SWAP_PART="${DISK}2"
-    	ROOT_PART="${DISK}3"
-	fi
-
-elif [[ "$PARTITIONING_METHOD" == "2" ]]; then
-	echo "You chose manual partitioning."
-	# Manual partitioning using cfdisk
-	cfdisk "$DISK"
-    
-	# Define partition variables after manual partitioning
-	if [[ "$DISK" == /dev/nvme* ]]; then
-    	EFI_PART="${DISK}p1"
-    	SWAP_PART="${DISK}p2"
-    	ROOT_PART="${DISK}p3"
-	else
-    	EFI_PART="${DISK}1"
-    	SWAP_PART="${DISK}2"
-    	ROOT_PART="${DISK}3"
-	fi
-else
-	echo "Invalid option selected. Exiting."
-	exit 1
-fi
 
 # Check disk selection
 echo "You selected $DISK for installation. All data on this disk will be erased!"
 read -p "Are you sure you want to proceed? (yes/no): " CONFIRM
 if [[ "$CONFIRM" != "yes" ]]; then
-	echo "Installation aborted."
-	exit 1
+    echo "Installation aborted."
+    exit 1
+fi
+
+# Wipe the drive and create a new GPT partition table using fdisk
+echo "Wiping the drive $DISK and creating a new GPT partition table..."
+if ! fdisk "$DISK" <<< $'g\nw'; then
+    echo "Failed to wipe the disk and create a new GPT partition table."
+    exit 1
+fi
+
+# Choose partitioning method
+read -p "Choose partitioning method (1 for automatic, 2 for manual): " PARTITIONING_METHOD
+
+if [[ "$PARTITIONING_METHOD" == "1" ]]; then
+    echo "Automatically partitioning the disk..."
+    
+    # Define partition sizes
+    EFI_SIZE="1G"  # Set size for EFI partition to 1GB
+    SWAP_SIZE="4G"  # Set size for Swap partition to 4GB
+
+    # Partition the disk with fdisk
+    echo "Partitioning the disk with fdisk..."
+    if ! fdisk "$DISK" <<< $'n\n\n\n\n+'"$EFI_SIZE"'\nt\n1\nn\n\n+'"$SWAP_SIZE"'\nt\n2\nn\n\n\n\nw' 2>&1; then
+        echo "fdisk failed to partition the disk."
+        exit 1
+    fi
+
+elif [[ "$PARTITIONING_METHOD" == "2" ]]; then
+    echo "You chose manual partitioning."
+    
+    # Manual partitioning using cfdisk
+    cfdisk "$DISK"
+
+    # After manual partitioning, ensure the partitions are set
+    if [[ "$DISK" == /dev/nvme* ]]; then
+        EFI_PART="${DISK}p1"
+        SWAP_PART="${DISK}p2"
+        ROOT_PART="${DISK}p3"
+    else
+        EFI_PART="${DISK}1"
+        SWAP_PART="${DISK}2"
+        ROOT_PART="${DISK}3"
+    fi
+
+else
+    echo "Invalid option selected. Exiting."
+    exit 1
 fi
 
 # Format partitions
 echo "Formatting partitions..."
 mkfs.fat -F32 "$EFI_PART"  # EFI partition
-mkswap "$SWAP_PART"     	# Swap partition
-mkfs.ext4 "$ROOT_PART"  	# Root partition (the rest of the disk)
+mkswap "$SWAP_PART"        # Swap partition
+mkfs.ext4 "$ROOT_PART"     # Root partition (the rest of the disk)
 
 # Mount filesystem
 echo "Mounting filesystem..."
 mount "$ROOT_PART" /mnt
 mkdir -p /mnt/boot
 mount "$EFI_PART" /mnt/boot  # Mount EFI partition
-swapon "$SWAP_PART"       	# Enable swap
+swapon "$SWAP_PART"           # Enable swap
 
 # Install essential packages
 echo "Installing essential packages..."
@@ -173,14 +172,13 @@ echo
 
 # Set root password
 echo "Setting root password..."
-echo "root:\$ROOT_PASSWORD" | chpasswd
+echo "root:$ROOT_PASSWORD" | chpasswd
 
-useradd -m -G wheel "\$USERNAME"
-echo "\$USERNAME:\$USER_PASSWORD" | chpasswd
+useradd -m -G wheel "$USERNAME"
+echo "$USERNAME:$USER_PASSWORD" | chpasswd
 
 # Set hostname
-HOSTNAME=\$(dmidecode -s system-product-name)
-echo "\$HOSTNAME" > /etc/hostname
+echo "$hostname" > /etc/hostname
 
 # Create necessary service directories
 create_service_dir "lightdm.service.d"
@@ -203,11 +201,11 @@ enable_service pipewire
 enable_service pipewire-pulse
 
 # Set timezone
-ln -sf /usr/share/zoneinfo/America/New_York /etc/localtime
+ln -sf /usr/share/zoneinfo/"$timezone" /etc/localtime
 hwclock --systohc
 
 # Localization
-sed -i 's/^#\\(en_US\\.UTF-8\\)/\\1/' /etc/locale.gen
+sed -i 's/^#\(en_US\.UTF-8\)/\1/' /etc/locale.gen
 locale-gen
 echo "LANG=en_US.UTF-8" > /etc/locale.conf
 
@@ -251,11 +249,9 @@ cp -r "$CONFIG_SOURCE/"* "$ROOT_CONFIG_DIR/" || { echo "Failed to copy configura
 # Clean up the cloned configuration repository
 rm -rf /tmp/configs
 
-
-
 # Install GRUB and efibootmgr
 echo "Installing GRUB and efibootmgr..."
-arch-chroot /mnt pacman -Sy grub efibootmgr || { echo "GRUB and efibootmgr installation failed."; exit 1; }
+pacman -Sy grub efibootmgr || { echo "GRUB and efibootmgr installation failed."; exit 1; }
 
 # Install GRUB
 echo "Installing GRUB..."
@@ -267,5 +263,5 @@ sed -i 's/Arch Linux/DylanOS 4.0/g' /boot/grub/grub.cfg || { echo "Failed to upd
 echo "Installation completed successfully! You can now reboot into DylanOS."
 
 exit
-
+EOF
 
