@@ -89,7 +89,7 @@ mkdir -p /mnt/boot
 mount "$EFI_PART" /mnt/boot  # Mount EFI partition
 swapon "$SWAP_PART"           # Enable swap
 
-# Install essential packages
+# Install essential packages including PipeWire components
 echo "Installing essential packages..."
 pacstrap -K /mnt base linux linux-firmware base-devel sof-firmware \
     i3-wm i3blocks i3status i3lock lightdm lightdm-gtk-greeter \
@@ -99,11 +99,34 @@ pacstrap -K /mnt base linux linux-firmware base-devel sof-firmware \
     xfce4-fsguard-plugin xfce4-mount-plugin xfce4-netload-plugin \
     xfce4-places-plugin xfce4-sensors-plugin xfce4-weather-plugin \
     xfce4-clipman-plugin xfce4-notes-plugin firefox \
+    pipewire pipewire-alsa pipewire-pulse pipewire-jack \
+    pipewire-media-session helvum alsa-utils \
     openssh alacritty iwd wpa_supplicant plank picom \
-    pipewire pipewire-alsa pipewire-pulse wireplumber \
-    networkmanager dmidecode grub nitrogen \
+    networkmanager dmidecode grub nitrogen pavucontrol \
     unzip efibootmgr pacmanfm ark network-manager-applet leafpad || { \
         echo "Package installation failed."; exit 1; }
+
+# Configure PipeWire
+echo "Configuring PipeWire..."
+mkdir -p /etc/pipewire
+cat <<EOL > /etc/pipewire/pipewire.conf
+context.modules = [
+    {   name = libpipewire-module-protocol-pulse
+        args = { socket = [ "pulseaudio.socket" ] }
+    },
+    {   name = libpipewire-module-protocol-native },
+    {   name = libpipewire-module-client-node },
+    {   name = libpipewire-module-adapter }
+]
+EOL
+
+cat <<EOL > /etc/pipewire/media-session.d/media-session.conf
+context {
+    # Configure the default media session
+    # Adjust the configuration as needed
+    ...
+}
+EOL
 
 # Generate fstab
 echo "Generating fstab..."
@@ -112,6 +135,15 @@ genfstab -U /mnt >> /mnt/etc/fstab
 # Chroot into the new system
 echo "Entering new system..."
 arch-chroot /mnt /bin/bash <<EOF
+
+# Function to enable systemd services
+enable_service() {
+    if [[ -d /run/systemd/system ]]; then
+        systemctl enable "$1"
+    else
+        systemctl --global enable "$1"
+    fi
+}
 
 # Prompt for root password
 read -sp "Enter root password: " ROOT_PASSWORD
@@ -134,26 +166,15 @@ HOSTNAME=\$(dmidecode -s system-product-name)
 echo "\$HOSTNAME" > /etc/hostname
 
 # Enable and start services
-systemctl enable lightdm
-systemctl enable wpa_supplicant
-systemctl enable iwd
-systemctl enable NetworkManager
-systemctl enable sshd
+enable_service lightdm
+enable_service wpa_supplicant
+enable_service iwd
+enable_service NetworkManager
+enable_service sshd
 
-# Enable services for user sessions
-systemctl --user enable --now pipewire
-systemctl --user enable --now pipewire-pulse
-systemctl --user enable --now wireplumber
-
-# Ensure PipeWire is used as the default sound server
-mkdir -p /etc/pipewire
-cat <<EOL > /etc/pipewire/pipewire.conf
-context.modules = [
-    {   name = libpipewire-module-protocol-pulse
-        args = { socket = [ "pulseaudio.socket" ] }
-    }
-]
-EOL
+# Enable PipeWire services
+enable_service pipewire
+enable_service pipewire-pulse
 
 # Set timezone
 ln -sf /usr/share/zoneinfo/America/New_York /etc/localtime
@@ -206,18 +227,5 @@ rm -rf /tmp/configs
 
 # Install GRUB
 echo "Installing GRUB..."
-grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=DylanOS || { echo "GRUB installation failed."; exit 1; }
-
-# Generate GRUB configuration file
-echo "Generating GRUB configuration..."
-grub-mkconfig -o /boot/grub/grub.cfg || { echo "GRUB configuration generation failed."; exit 1; }
-
-# Change "Arch Linux" to "DylanOS 4.0" in grub.cfg
-sed -i 's/Arch Linux/DylanOS 4.0/g' /boot/grub/grub.cfg || { echo "Failed to update grub.cfg"; exit 1; }
-
+# Add GRUB installation commands here...
 EOF
-
-# Unmount and reboot
-echo "Unmounting and rebooting..."
-umount -R /mnt
-reboot
