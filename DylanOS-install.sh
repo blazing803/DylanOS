@@ -25,6 +25,17 @@ read -sp "Enter the password for $USER (input hidden): " PASSWORD
 echo
 read -p "Enter your timezone (e.g., Region/City): " TIMEZONE
 
+# Function for checking if a command exists
+check_command() {
+    command -v "$1" >/dev/null 2>&1 || { echo "$1 is required but not installed. Exiting."; exit 1; }
+}
+
+# Check if required commands exist
+check_command cfdisk
+check_command git
+check_command pacstrap
+check_command arch-chroot
+
 # User Input Validation for Disk
 while true; do
     if [[ -b "$DISK" ]]; then
@@ -35,32 +46,24 @@ while true; do
     fi
 done
 
-# Check if the user is installing on an NVMe disk
-read -p "Is this an NVMe disk? (yes/no): " NVME_RESPONSE
-USE_NVME=${NVME_RESPONSE,,}  # Lowercase the response
+# Use cfdisk for manual partitioning
+echo "Launching cfdisk for manual partitioning of $DISK..."
+cfdisk $DISK || { echo "Failed to launch cfdisk. Exiting."; exit 1; }
 
-if [[ "$USE_NVME" == "yes" || "$USE_NVME" == "y" ]]; then
-    EFI_PART="${DISK}p1"
-    ROOT_PART="${DISK}p2"
-else
-    EFI_PART="${DISK}1"
-    ROOT_PART="${DISK}2"
-fi
-
-# Partitioning (assuming GPT and UEFI)
-parted $DISK mklabel gpt
-parted $DISK mkpart primary fat32 1MiB 512MiB
-parted $DISK set 1 esp on
-parted $DISK mkpart primary ext4 512MiB 100%
+# Prompt user for partition details (EFI and root partition)
+read -p "Enter the EFI partition (e.g., /dev/sda1): " EFI_PART
+read -p "Enter the root partition (e.g., /dev/sda2): " ROOT_PART
 
 # Formatting the partitions
-mkfs.fat -F32 $EFI_PART
-mkfs.ext4 $ROOT_PART
+echo "Formatting partitions..."
+mkfs.fat -F32 $EFI_PART || { echo "Failed to format EFI partition."; exit 1; }
+mkfs.ext4 $ROOT_PART || { echo "Failed to format root partition."; exit 1; }
 
 # Mount partitions
-mount $ROOT_PART /mnt
+echo "Mounting partitions..."
+mount $ROOT_PART /mnt || { echo "Failed to mount root partition."; exit 1; }
 mkdir /mnt/boot
-mount $EFI_PART /mnt/boot
+mount $EFI_PART /mnt/boot || { echo "Failed to mount EFI partition."; exit 1; }
 
 # Install base packages using pacstrap
 echo "Installing base system packages..."
@@ -94,11 +97,17 @@ pacman -Sy --noconfirm lightdm lightdm-gtk-greeter i3 xfce4 picom plank \
 
 # Install Yay (AUR helper)
 echo "Installing Yay..."
-su - $USER -c "git clone https://aur.archlinux.org/yay.git /tmp/yay && cd /tmp/yay && makepkg -si --noconfirm && cd .. && rm -rf /tmp/yay"
+su - $USER -c "git clone https://aur.archlinux.org/yay.git /tmp/yay && cd /tmp/yay && makepkg -si --noconfirm && cd .. && rm -rf /tmp/yay" || {
+    echo "Failed to install Yay."
+    exit 1
+}
 
 # Install Google Chrome
 echo "Installing Google Chrome..."
-su - $USER -c "yay -S google-chrome --noconfirm"
+su - $USER -c "yay -S google-chrome --noconfirm" || {
+    echo "Failed to install Google Chrome."
+    exit 1
+}
 
 # Generate fstab
 genfstab -U /mnt >> /mnt/etc/fstab
