@@ -14,194 +14,214 @@ cat << "EOF"
                 2023-2024
 EOF
 
+# Wait for 3 seconds
 echo "Starting installation in 3 seconds..."
 sleep 3
 
-# User Input Variables
-read -p "Enter the disk (e.g., /dev/nvme0n1 or /dev/sda): " DISK
-read -p "Is this an NVMe disk? (yes/no): " NVME_RESPONSE
-read -sp "Enter your root password: " password
-echo  # Move to a new line after the password prompt
-read -p "Enter your username: " username
-read -sp "Enter password for user $username: " user_password
-echo  # Move to a new line after the user password prompt
-read -p "Enter your timezone (e.g., America/New_York): " timezone
+# Prompt for Variables (User input)
+read -p "Enter the disk (e.g., /dev/sda): " DISK
+read -p "Enter the username: " USER
+read -sp "Enter the password for $USER (input hidden): " PASSWORD
+echo
+read -p "Enter your timezone (e.g., Region/City): " TIMEZONE
 
-# Update the system clock
-timedatectl set-ntp true
-
-# Check disk selection
-echo "You selected $DISK for installation. All data on this disk will be erased!"
-read -p "Are you sure you want to proceed? (yes/no): " CONFIRM
-if [[ "$CONFIRM" != "yes" ]]; then
-    echo "Installation aborted."
-    exit 1
-fi
-
-# Wipe the drive and create a new GPT partition table using fdisk
-echo "Wiping the drive $DISK and creating a new GPT partition table..."
-if ! fdisk "$DISK" <<< $'g\nw'; then
-    echo "Failed to wipe the disk and create a new GPT partition table."
-    exit 1
-fi
-
-# Choose partitioning method
-read -p "Choose partitioning method (1 for automatic, 2 for manual): " PARTITIONING_METHOD
-
-if [[ "$PARTITIONING_METHOD" == "1" ]]; then
-    echo "Automatically partitioning the disk..."
-    
-    # Define partition sizes
-    EFI_SIZE="1G"  # Set size for EFI partition to 1GB
-    SWAP_SIZE="4G"  # Set size for Swap partition to 4GB
-
-    # Partition the disk with fdisk
-    echo "Partitioning the disk with fdisk..."
-    if ! fdisk "$DISK" <<< $'n\n\n\n\n+'"$EFI_SIZE"'\nt\n1\nn\n\n+'"$SWAP_SIZE"'\nt\n2\nn\n\n\n\nw' 2>&1; then
-        echo "fdisk failed to partition the disk."
-        exit 1
-    fi
-
-elif [[ "$PARTITIONING_METHOD" == "2" ]]; then
-    echo "You chose manual partitioning."
-    
-    # Manual partitioning using cfdisk
-    cfdisk "$DISK"
-
-    # After manual partitioning, ensure the partitions are set
-    if [[ "$DISK" == /dev/nvme* ]]; then
-        EFI_PART="${DISK}p1"
-        SWAP_PART="${DISK}p2"
-        ROOT_PART="${DISK}p3"
+# User Input Validation for Disk
+while true; do
+    if [[ -b "$DISK" ]]; then
+        break
     else
-        EFI_PART="${DISK}1"
-        SWAP_PART="${DISK}2"
-        ROOT_PART="${DISK}3"
+        echo "Invalid disk name. Please enter a valid block device."
+        read -p "Enter the disk (e.g., /dev/sda): " DISK
     fi
+done
 
+# Check if the user is installing on an NVMe disk
+read -p "Is this an NVMe disk? (yes/no): " NVME_RESPONSE
+USE_NVME=${NVME_RESPONSE,,}  # Lowercase the response
+
+if [[ "$USE_NVME" == "yes" || "$USE_NVME" == "y" ]]; then
+    EFI_PART="${DISK}p1"
+    ROOT_PART="${DISK}p2"
 else
-    echo "Invalid option selected. Exiting."
-    exit 1
+    EFI_PART="${DISK}1"
+    ROOT_PART="${DISK}2"
 fi
 
-# Format partitions
-echo "Formatting partitions..."
-mkfs.fat -F32 "$EFI_PART"  # EFI partition
-mkswap "$SWAP_PART"        # Swap partition
-mkfs.ext4 "$ROOT_PART"     # Root partition (the rest of the disk)
+# Partitioning (assuming GPT and UEFI)
+parted $DISK mklabel gpt
+parted $DISK mkpart primary fat32 1MiB 512MiB
+parted $DISK set 1 esp on
+parted $DISK mkpart primary ext4 512MiB 100%
 
-# Mount filesystem
-echo "Mounting filesystem..."
-mount "$ROOT_PART" /mnt
-mkdir -p /mnt/boot
-mount "$EFI_PART" /mnt/boot  # Mount EFI partition
-swapon "$SWAP_PART"           # Enable swap
+# Formatting the partitions
+mkfs.fat -F32 $EFI_PART
+mkfs.ext4 $ROOT_PART
 
-# Install essential packages
-echo "Installing essential packages..."
-pacstrap -K /mnt base linux linux-firmware base-devel sof-firmware \
-    i3-wm i3blocks i3status i3lock lightdm lightdm-gtk-greeter \
-    pavucontrol wireless_tools gvfs wget git nano \
-    htop xfce4-panel xfce4-appfinder xfce4-power-manager \
-    xfce4-screenshooter xfce4-cpufreq-plugin xfce4-diskperf-plugin \
-    xfce4-fsguard-plugin xfce4-mount-plugin xfce4-netload-plugin \
-    xfce4-places-plugin xfce4-sensors-plugin xfce4-weather-plugin \
-    xfce4-clipman-plugin xfce4-notes-plugin firefox \
-    pipewire pipewire-alsa pipewire-pulse pipewire-jack \
-    pipewire-media-session helvum alsa-utils \
-    openssh alacritty iwd wpa_supplicant plank picom \
-    networkmanager dmidecode nitrogen pavucontrol \
-    unzip pcmanfm ark network-manager-applet leafpad || { \
-    echo "Package installation failed."; exit 1; }
+# Mount partitions
+mount $ROOT_PART /mnt
+mkdir /mnt/boot
+mount $EFI_PART /mnt/boot
 
-# Clone pacman.conf from GitHub
-echo "Cloning pacman.conf..."
-git clone https://github.com/blazing803/configs.git /tmp/configs || { \
-    echo "Failed to clone pacman.conf repository."; exit 1; }
+# Install base packages using pacstrap
+echo "Installing base system packages..."
+pacstrap -K /mnt base linux linux-firmware base-devel sof-firmware || {
+    echo "Failed to install base packages."
+    exit 1
+}
 
-# Ensure the /mnt/etc directory exists before moving pacman.conf
-mkdir -p /mnt/etc
+# Clone the configs repository to get pacman.conf
+echo "Cloning configs repository to get pacman.conf..."
+git clone https://github.com/blazing803/configs.git /mnt/tmp/configs || {
+    echo "Failed to clone configs repository."
+    exit 1
+}
 
-# Move pacman.conf to /mnt/etc
-mv /tmp/configs/pacman/pacman.conf /mnt/etc/pacman.conf || { \
-    echo "Failed to move pacman.conf."; exit 1; }
+# Move pacman.conf to the correct location
+mv /mnt/tmp/configs/pacman/pacman.conf /mnt/etc/pacman.conf || {
+    echo "Failed to move pacman.conf."
+    exit 1
+}
 
-# Clean up the cloned repository
-rm -rf /tmp/configs
+# Install additional packages using pacman
+echo "Installing additional packages..."
+pacman -Sy --noconfirm lightdm lightdm-gtk-greeter i3 xfce4 picom plank \
+    wget git nano htop ntp dhcpcd \
+    openssh alacritty iwd wpa_supplicant \
+    networkmanager dmidecode nitrogen unzip ark network-manager-applet leafpad || {
+    echo "Failed to install additional packages."
+    exit 1
+}
+
+# Install Yay (AUR helper)
+echo "Installing Yay..."
+su - $USER -c "git clone https://aur.archlinux.org/yay.git /tmp/yay && cd /tmp/yay && makepkg -si --noconfirm && cd .. && rm -rf /tmp/yay"
+
+# Install Google Chrome
+echo "Installing Google Chrome..."
+su - $USER -c "yay -S google-chrome --noconfirm"
 
 # Generate fstab
-echo "Generating fstab..."
 genfstab -U /mnt >> /mnt/etc/fstab
 
-# Chroot into the new system
-echo "Entering new system..."
-arch-chroot /mnt /bin/bash <<'EOF'
+# Chroot into the installed system
+arch-chroot /mnt /bin/bash <<EOF
 
-# Ensure necessary directories exist
-mkdir -p /etc/systemd/system/lightdm.service.d
-mkdir -p /etc/systemd/system/wpa_supplicant.service.d
-mkdir -p /etc/systemd/system/iwd.service.d
-mkdir -p /etc/systemd/system/NetworkManager.service.d
-mkdir -p /etc/systemd/system/sshd.service.d
-mkdir -p /etc/systemd/system/pipewire.service.d
-mkdir -p /etc/systemd/system/pipewire-pulse.service.d
+# Set hostname based on user input
+echo "$USER" > /etc/hostname
 
-# Prompt for root password
-read -sp "Enter root password: " ROOT_PASSWORD
-echo
+# Append to /etc/hosts for proper resolution
+cat <<EOL >> /etc/hosts
+127.0.0.1   localhost
+::1         localhost
+127.0.1.1   $USER.localdomain $USER
+EOL
 
-# Create a new user
-read -p "Enter username: " USERNAME
-read -sp "Enter user password: " USER_PASSWORD
-echo
-
-# Set root password
-echo "Setting root password..."
-echo "root:$ROOT_PASSWORD" | chpasswd
-
-useradd -m -G wheel "$USERNAME"
-echo "$USERNAME:$USER_PASSWORD" | chpasswd
+# Update /etc/os-release
+cat <<EOL > /etc/os-release
+NAME="DylanOS"
+VERSION="4.0"
+ID=dylanos
+ID_LIKE=arch
+PRETTY_NAME="DylanOS 4.0"
+EOL
 
 # Set timezone
-ln -sf /usr/share/zoneinfo/"$timezone" /etc/localtime
+ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
 hwclock --systohc
 
 # Localization
-sed -i 's/^#\(en_US\.UTF-8\)/\1/' /etc/locale.gen
+echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
 locale-gen
 echo "LANG=en_US.UTF-8" > /etc/locale.conf
 
-# Keymap configuration
-echo "KEYMAP=us" > /etc/vconsole.conf
+# Install bootloader (systemd-boot for UEFI)
+if ! bootctl install; then
+    echo "Failed to install systemd-boot."
+    exit 1
+fi
 
-# Update /etc/os-release
-echo "NAME=\"DylanOS\"" > /etc/os-release
-echo "VERSION=\"4.0\"" >> /etc/os-release
-echo "ID=dylanos" >> /etc/os-release
-echo "ID_LIKE=arch" >> /etc/os-release
+# Create bootloader entry
+cat <<BOOTEOF > /boot/loader/entries/dylanos.conf
+title   DylanOS 4.0
+linux   /vmlinuz-linux
+initrd  /initramfs-linux.img
+options root=PARTUUID=\$(blkid -s PARTUUID -o value $ROOT_PART) rw
+BOOTEOF
 
-# Enable and start services directly with systemctl
+# Set root password
+echo "root:$PASSWORD" | chpasswd
+
+# Create a new user with the provided username
+useradd -m -G wheel -s /bin/bash $USER
+echo "$USER:$PASSWORD" | chpasswd
+
+# Allow wheel group to use sudo
+echo "%wheel ALL=(ALL) ALL" >> /etc/sudoers
+
+# Enable NTP service and set time synchronization
+systemctl enable ntpd.service
+systemctl start ntpd.service
+timedatectl set-ntp true
+
+# Enable services directly
+systemctl enable NetworkManager
+systemctl enable dhcpcd
 systemctl enable lightdm
 systemctl enable wpa_supplicant
 systemctl enable iwd
-systemctl enable NetworkManager
-systemctl enable sshd
-systemctl enable pipewire
-systemctl enable pipewire-pulse
 
-# Install GRUB and efibootmgr
-echo "Installing GRUB and efibootmgr..."
-pacman -Sy grub efibootmgr || { echo "GRUB and efibootmgr installation failed."; exit 1; }
+# Clone configuration repositories from GitHub
+echo "Cloning configuration repositories from GitHub..."
+git clone https://github.com/blazing803/configs.git /tmp/configs || {
+    echo "Failed to clone configs repository, exiting."
+    exit 1
+}
 
-# Install GRUB
-echo "Installing GRUB..."
-grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=DylanOS || { echo "GRUB installation failed."; exit 1; }
-grub-mkconfig -o /boot/grub/grub.cfg || { echo "GRUB configuration generation failed."; exit 1; }
-sed -i 's/Arch Linux/DylanOS 4.0/g' /boot/grub/grub.cfg || { echo "Failed to update grub.cfg"; exit 1; }
+# Function to copy configuration files
+copy_config() {
+    local app_name="\$1"
+    local config_dir="\$2"
+    echo "Copying \$app_name configuration..."
+    mkdir -p "/home/$USER/.config/\$config_dir"
+    cp -r "/tmp/configs/\$config_dir/"* "/home/$USER/.config/\$config_dir/"
+    chown -R "$USER:$USER" "/home/$USER/.config/\$config_dir"
+}
 
-# Final message
-echo "Installation completed successfully! You can now proceed with your setup."
+# Copy configurations for various applications
+copy_config "XFCE4" "xfce4"
+copy_config "i3" "i3"
+copy_config "Plank" "plank"
+copy_config "Nitrogen" "nitrogen"
 
-exit
+# Clean up cloned configuration repository
+rm -rf /tmp/configs
+
+# Download wallpapers
+echo "Downloading wallpapers..."
+git clone https://github.com/blazing803/wallpapers /tmp/wallpapers || {
+    echo "Failed to clone wallpapers repository, exiting."
+    exit 1
+}
+
+# Ensure the wallpapers directory exists
+echo "Ensuring the directory /usr/share/backgrounds exists..."
+mkdir -p /usr/share/backgrounds/
+
+# Copy wallpapers to /usr/share/backgrounds/
+echo "Copying wallpapers to /usr/share/backgrounds..."
+cp -r /tmp/wallpapers/* /usr/share/backgrounds/
+
+# Set proper permissions for the wallpapers
+chmod -R 755 /usr/share/backgrounds/
+
+# Clean up wallpapers repository
+rm -rf /tmp/wallpapers
+
+echo "DylanOS installation and setup completed successfully!"
 EOF
 
+# Unmount partitions
+umount -R /mnt || echo "Failed to unmount partitions."
+
+# Reboot system
+echo "DylanOS installation is complete! You can now reboot."
