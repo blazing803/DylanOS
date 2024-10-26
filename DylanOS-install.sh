@@ -83,8 +83,8 @@ PACKAGES=(
     xfce4-mount-plugin xfce4-netload-plugin xfce4-places-plugin xfce4-sensors-plugin
     xfce4-weather-plugin xfce4-clipman-plugin xfce4-notes-plugin xfce4-panel
     xfce4-appfinder xfce4-power-manager xfce4-screenshooter xorg firefox picom
-    nitrogen ntp dhcpcd networkmanager dmidecode unzip leafpad pulseaudio qpaeq
-    kmix korganizer kdepim ktime
+    nitrogen ntp dhcpcd networkmanager dmidecode unzip leafpad pulseaudio 
+    network-manager-applet plank 
 )
 
 # Install DylanOS packages with pacstrap
