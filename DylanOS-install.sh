@@ -198,6 +198,24 @@ chmod -R 755 /usr/share/backgrounds/
 # Clean up wallpapers repository
 rm -rf /tmp/wallpapers
 
+# Clone the icons repository to get the panel icon
+echo "Cloning icons repository..."
+git clone --depth 1 https://github.com/blazing803/icons /tmp/icons || { echo "Failed to clone icons repository. Exiting."; exit 1; }
+
+# Ensure the directory /usr/share/pixmaps exists
+echo "Ensuring the directory /usr/share/pixmaps exists..."
+mkdir -p /usr/share/pixmaps/
+
+# Copy the DyOS-icon.png to /usr/share/pixmaps
+echo "Copying DyOS-icon.png to /usr/share/pixmaps..."
+cp /tmp/icons/DyOS-icon.png /usr/share/pixmaps/ || { echo "Failed to copy DyOS icon. Exiting."; exit 1; }
+
+# Set proper permissions for the icon
+chmod 644 /usr/share/pixmaps/DyOS-icon.png || { echo "Failed to set permissions for DyOS icon. Exiting."; exit 1; }
+
+# Clean up icons repository
+rm -rf /tmp/icons
+
 echo "DylanOS installation and setup completed successfully!"
 EOF
 
