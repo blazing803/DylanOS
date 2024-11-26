@@ -14,18 +14,16 @@ cat << "EOF"
                 2023-2024
 EOF
 
-# Wait for 3 seconds
-echo "Starting installation in 3 seconds..."
-sleep 3
+# Function to check if the system is using UEFI
+check_efi() {
+    if [ -d /sys/firmware/efi ]; then
+        return 0  # EFI detected
+    else
+        return 1  # BIOS detected
+    fi
+}
 
-# Prompt for Variables (User input)
-read -p "Enter the disk (e.g., /dev/sda): " DISK
-read -p "Enter the username: " USER
-read -sp "Enter the password for $USER (input hidden): " PASSWORD
-echo
-read -p "Enter your timezone (e.g., Region/City): " TIMEZONE
-
-# Function for checking if a command exists
+# Check if required commands exist
 check_command() {
     command -v "$1" >/dev/null 2>&1 || { echo "$1 is required but not installed. Exiting."; exit 1; }
 }
@@ -35,34 +33,76 @@ for cmd in cfdisk git pacstrap arch-chroot; do
     check_command "$cmd"
 done
 
-# User Input Validation for Disk
-while true; do
-    if [[ -b "$DISK" ]]; then
-        break
-    else
-        echo "Invalid disk name. Please enter a valid block device."
-        read -p "Enter the disk (e.g., /dev/sda): " DISK
-    fi
-done
+# Get input for dual-booting option
+read -p "Do you want to set up dual boot (yes/no)? " DUALBOOT
+DUALBOOT=${DUALBOOT:-no}  # Default to no
 
-# Use cfdisk for manual partitioning
-echo "Launching cfdisk for manual partitioning of $DISK..."
-cfdisk $DISK
+# Get input for enabling UFW firewall
+read -p "Do you want to enable UFW firewall (yes/no)? " ENABLE_UFW
+ENABLE_UFW=${ENABLE_UFW:-no}  # Default to no
 
-# Prompt user for partition details (EFI and root partition)
-read -p "Enter the EFI partition (e.g., /dev/sda1): " EFI_PART
-read -p "Enter the root partition (e.g., /dev/sda2): " ROOT_PART
+# Get input for timezone (optional, you can customize this as needed)
+read -p "Enter your timezone (e.g., 'America/New_York'): " TIMEZONE
+TIMEZONE=${TIMEZONE:-"America/New_York"}  # Default to 'America/New_York'
+
+# Get input for username and password
+read -p "Enter your username: " USER
+read -sp "Enter your password: " PASSWORD
+echo
+
+# Get input for disk to install to (e.g., /dev/sda)
+read -p "Enter the disk you want to install to (e.g., /dev/sda): " DISK
+
+# Check if the system is using UEFI or BIOS
+check_efi
+if [ $? -eq 0 ]; then
+    # EFI detected
+    echo "UEFI detected. Installing systemd-boot for UEFI..."
+    pacman -S --noconfirm systemd-boot efibootmgr dosfstools os-prober
+
+    # Install systemd-boot for UEFI systems
+    bootctl --path=/mnt/boot install || { echo "Failed to install systemd-boot for UEFI. Exiting."; exit 1; }
+
+    # Generate systemd-boot configuration for EFI
+    cp /mnt/boot/loader/loader.conf /mnt/boot/loader/entries/arch.conf
+    echo "default arch" > /mnt/boot/loader/loader.conf
+    echo "timeout 4" >> /mnt/boot/loader/loader.conf
+
+else
+    # BIOS detected
+    echo "BIOS detected. Installing GRUB bootloader for BIOS..."
+    pacman -S --noconfirm grub os-prober
+
+    # Install GRUB for BIOS systems (Legacy)
+    grub-install --target=i386-pc --recheck --boot-directory=/mnt/boot /dev/sda || { echo "Failed to install GRUB for BIOS. Exiting."; exit 1; }
+
+    # Generate GRUB configuration for BIOS
+    grub-mkconfig -o /mnt/boot/grub/grub.cfg || { echo "Failed to generate GRUB configuration for BIOS. Exiting."; exit 1; }
+
+    echo "GRUB for BIOS has been installed and configured."
+fi
+
+# Partition Automation (Automatic Partitioning)
+if [ "$DUALBOOT" == "yes" ]; then
+    echo "Creating partitions for dual-boot setup..."
+    # Here, you would create partitions for both systems. For example:
+    echo -e "o\nn\np\n1\n\n+1G\nt\n1\nn\np\n2\n\n\nw" | fdisk $DISK || { echo "Failed to partition disk. Exiting."; exit 1; }
+else
+    echo "Creating partitions for single boot setup..."
+    # Create the partitions for a single system setup.
+    echo -e "o\nn\np\n1\n\n+1G\nt\n1\nn\np\n2\n\n\nw" | fdisk $DISK || { echo "Failed to partition disk. Exiting."; exit 1; }
+fi
 
 # Formatting the partitions
 echo "Formatting partitions..."
-mkfs.fat -F32 "$EFI_PART" || { echo "Failed to format EFI partition. Exiting."; exit 1; }
-mkfs.ext4 "$ROOT_PART" || { echo "Failed to format root partition. Exiting."; exit 1; }
+mkfs.fat -F32 "$DISK"1 || { echo "Failed to format EFI partition. Exiting."; exit 1; }
+mkfs.ext4 "$DISK"2 || { echo "Failed to format root partition. Exiting."; exit 1; }
 
 # Mount partitions
 echo "Mounting partitions..."
-mount "$ROOT_PART" /mnt || { echo "Failed to mount root partition. Exiting."; exit 1; }
+mount "$DISK"2 /mnt || { echo "Failed to mount root partition. Exiting."; exit 1; }
 mkdir -p /mnt/boot
-mount "$EFI_PART" /mnt/boot || { echo "Failed to mount EFI partition. Exiting."; exit 1; }
+mount "$DISK"1 /mnt/boot || { echo "Failed to mount EFI partition. Exiting."; exit 1; }
 
 # Install Arch Linux base packages using pacstrap
 echo "Installing base system packages..."
@@ -75,7 +115,7 @@ git clone --depth 1 https://github.com/blazing803/configs.git /mnt/tmp/configs |
 # Move pacman.conf to the correct location
 mv /mnt/tmp/configs/pacman/pacman.conf /mnt/etc/pacman.conf || { echo "Failed to move pacman.conf. Exiting."; exit 1; }
 
-# Install additional packages
+# Additional packages installation (modify as necessary)
 PACKAGES=(
     i3blocks lightdm lightdm-gtk-greeter pavucontrol wireless_tools gvfs i3lock
     wpa_supplicant htop nano vim i3-wm iwd openssh wget xdg-utils alacritty ark
@@ -84,7 +124,7 @@ PACKAGES=(
     xfce4-weather-plugin xfce4-clipman-plugin xfce4-notes-plugin xfce4-panel
     xfce4-appfinder xfce4-power-manager xfce4-screenshooter xorg firefox picom
     nitrogen ntp dhcpcd networkmanager dmidecode unzip leafpad pulseaudio 
-    network-manager-applet plank 
+    network-manager-applet plank papirus-icon-theme arc-gtk-theme vlc gimp git docker
 )
 
 # Install DylanOS packages with pacstrap
@@ -96,7 +136,7 @@ genfstab -U /mnt >> /mnt/etc/fstab
 # Chroot into the installed system
 arch-chroot /mnt /bin/bash <<EOF
 
-# Set hostname based on user input
+# Set hostname
 echo "$USER" > /etc/hostname
 
 # Append to /etc/hosts for proper resolution
@@ -124,17 +164,6 @@ echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
 locale-gen
 echo "LANG=en_US.UTF-8" > /etc/locale.conf
 
-# Install bootloader (systemd-boot for UEFI)
-bootctl install
-
-# Create bootloader entry
-cat <<BOOTEOF > /boot/loader/entries/dylanos.conf
-title   DylanOS 4.0
-linux   /vmlinuz-linux
-initrd  /initramfs-linux.img
-options root=PARTUUID=\$(blkid -s PARTUUID -o value $ROOT_PART) rw
-BOOTEOF
-
 # Set root password
 echo "root:$PASSWORD" | chpasswd
 
@@ -157,18 +186,39 @@ systemctl enable lightdm
 systemctl enable wpa_supplicant
 systemctl enable iwd
 
+# Enable ZRAM swap
+echo "Enabling ZRAM for swap..."
+modprobe zram
+echo -e "zram0\n" > /sys/block/zram0/comp_algorithm
+echo "1000000000" > /sys/block/zram0/disksize
+mkswap /dev/zram0
+swapon /dev/zram0
+
+# Firewall Setup (optional)
+if [ "$ENABLE_UFW" == "yes" ]; then
+    echo "Setting up firewall..."
+    pacman -S --noconfirm ufw
+    systemctl enable ufw
+    ufw default deny incoming
+    ufw default allow outgoing
+    ufw allow ssh
+    ufw enable
+else
+    echo "Skipping firewall setup."
+fi
+
 # Clone configuration repositories from GitHub
 echo "Cloning configuration repositories from GitHub..."
 git clone --depth 1 https://github.com/blazing803/configs.git /tmp/configs || { echo "Failed to clone configuration repository. Exiting."; exit 1; }
 
 # Function to copy configuration files
 copy_config() {
-    local app_name="$1"
-    local config_dir="$2"
-    echo "Copying $app_name configuration..."
-    mkdir -p "/home/$USER/.config/$config_dir"
-    cp -r "/tmp/configs/$config_dir/"* "/home/$USER/.config/$config_dir/"
-    chown -R "$USER:$USER" "/home/$USER/.config/$config_dir"
+	local app_name="$1"
+	local config_dir="$2"
+	echo "Copying $app_name configuration..."
+	mkdir -p "/home/$USER/.config/$config_dir"
+	cp -r "/tmp/configs/$config_dir/"* "/home/$USER/.config/$config_dir/"
+	chown -R "$USER:$USER" "/home/$USER/.config/$config_dir"
 }
 
 # Copy configurations for various applications
@@ -215,13 +265,25 @@ chmod 644 /usr/share/pixmaps/DyOS-icon.png || { echo "Failed to set permissions 
 
 # Clean up icons repository
 rm -rf /tmp/icons
+# Install yay or paru
+read -p "Would you like to install an AUR helper (yay/paru/none)? " AUR_HELPER
+AUR_HELPER=${AUR_HELPER:-none}  # Default to "none" if no input is given
 
-echo "DylanOS installation and setup completed successfully!"
+if [ "$AUR_HELPER" == "yay" ]; then
+    # Install yay from AUR
+    git clone https://aur.archlinux.org/cgit/aur.git/commit/?h=yay /home/$USER/yay || { echo "Failed to clone yay. Exiting."; exit 1; }
+    su - $USER -c "cd ~/yay && makepkg -si" || { echo "Failed to install yay. Exiting."; exit 1; }
+elif [ "$AUR_HELPER" == "paru" ]; then
+    # Install paru from AUR
+    git clone https://aur.archlinux.org/cgit/aur.git/commit/?h=paru /home/$USER/paru || { echo "Failed to clone paru. Exiting."; exit 1; }
+    su - $USER -c "cd ~/paru && makepkg -si" || { echo "Failed to install paru. Exiting."; exit 1; }
+elif [ "$AUR_HELPER" == "none" ]; then
+    echo "Skipping AUR helper installation."
+else
+    echo "Invalid option. Skipping AUR helper installation."
+fi
+
+# End of script
 EOF
 
-# Unmount partitions
-umount -R /mnt
-
-read -p "Installation complete. Would you like to reboot now? (y/n): " REBOOT_CONFIRM
-if [[ "$REBOOT_CONFIRM" =~ ^[Yy]$ ]]; then
-    reboot
+echo "Installation complete. Reboot into your new system!"
