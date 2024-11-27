@@ -51,10 +51,11 @@ read -p "Enter your timezone (e.g., 'America/New_York'): " TIMEZONE
 TIMEZONE=${TIMEZONE:-"America/New_York"}
 
 read -p "Enter your username: " USER
+
 read -sp "Enter your password: " PASSWORD
-echo
 
 read -p "Enter the disk you want to install to (e.g., /dev/sda): " DISK
+
 read -p "Do you want to wipe the partition table on $DISK? 
 
 # Function to delete the partition table by wiping the first 1MB of the disk
