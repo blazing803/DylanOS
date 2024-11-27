@@ -56,7 +56,8 @@ read -sp "Enter your password: " PASSWORD
 
 read -p "Enter the disk you want to install to (e.g., /dev/sda): " DISK
 
-read -p "Do you want to wipe the partition table on $DISK? 
+read -p "Do you want to wipe the partition table on $DISK? (yes/no) " WIPE_PARTITION
+WIPE_PARTITION=${WIPE_PARTITION:-no}
 
 # Function to delete the partition table by wiping the first 1MB of the disk
 delete_partition_table() {
@@ -69,6 +70,11 @@ delete_partition_table() {
     exit 1
   fi
 }
+
+# Wipe partition table if requested
+if [ "$WIPE_PARTITION" == "yes" ]; then
+    delete_partition_table
+fi
 
 # Partition Automation
 if [ "$DUALBOOT" == "yes" ]; then
@@ -181,18 +187,22 @@ copy_config "Plank" "plank"
 rm -rf /tmp/configs
 
 # Update /etc/os-release
-echo "NAME=\"DylanOS\"" > /etc/os-release
-echo "VERSION=\"4.0\"" >> /etc/os-release
-echo "ID=dylanos" >> /etc/os-release
-echo "ID_LIKE=arch" >> /etc/os-release
+echo "NAME=\"DylanOS\"" > /mnt/etc/os-release
+echo "VERSION=\"4.0\"" >> /mnt/etc/os-release
+echo "ID=dylanos" >> /mnt/etc/os-release
+echo "ID_LIKE=arch" >> /mnt/etc/os-release
 
-# Bootloader Installation
+# Bootloader Installation: Install GRUB and configure it based on UEFI or BIOS
 check_efi
 if [ $? -eq 0 ]; then
+    # UEFI system: Install GRUB and EFIBootMgr
     pacman -S --noconfirm grub efibootmgr
+    # Install GRUB for UEFI systems
     grub-install --target=x86_64-efi --efi-directory=/mnt/boot --bootloader-id=GRUB
 else
+    # BIOS system: Install GRUB for legacy BIOS
     pacman -S --noconfirm grub
+    # Install GRUB for BIOS systems
     grub-install --target=i386-pc --recheck "$DISK"
 fi
 
@@ -200,14 +210,8 @@ fi
 echo "Generating GRUB configuration..."
 grub-mkconfig -o /boot/grub/grub.cfg || { echo "GRUB configuration generation failed."; exit 1; }
 
-# Change "Arch Linux" to "DylanOS 4.0" in grub.cfg
+# Change "Arch Linux" to "DylanOS 4.0" in grub.cfg and GRUB settings
 sed -i 's/GRUB_DISTRIBUTOR="Arch"/GRUB_DISTRIBUTOR="DylanOS"/' /etc/default/grub
 sed -i 's/Arch Linux/DylanOS 4.0/g' /boot/grub/grub.cfg
 
-# Final Cleanup
-rm -rf /mnt/tmp/configs
-
-echo "Installation complete! Rebooting..."
-reboot
-
-
+echo "Installation complete! Please reboot."
