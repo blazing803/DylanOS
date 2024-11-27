@@ -86,7 +86,7 @@ pacstrap -K /mnt base linux linux-firmware base-devel sof-firmware \
     xfce4-places-plugin xfce4-sensors-plugin xfce4-weather-plugin \
     xfce4-clipman-plugin xfce4-notes-plugin firefox \
     openssh alacritty iwd wpa_supplicant plank picom \
-    pulseaudio NetworkManager dmidecode grub nitrogen unzip efibootmgr pcmanfm || { echo "Package installation failed."; exit 1; }
+    pulseaudio networkmanager dmidecode grub nitrogen unzip efibootmgr pcmanfm || { echo "Package installation failed."; exit 1; }
 
 # Cloning Configuration Repository
 echo "Cloning configs repository to get pacman.conf..."
