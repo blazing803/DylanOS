@@ -56,6 +56,18 @@ echo
 
 read -p "Enter the disk you want to install to (e.g., /dev/sda): " DISK
 
+# Function to delete the partition table by wiping the first 1MB of the disk
+delete_partition_table() {
+  echo "Wiping the partition table on $DISK..."
+  dd if=/dev/zero of=$DISK bs=512 count=2048 status=progress
+  if [ $? -eq 0 ]; then
+    echo "Partition table deleted successfully on $DISK."
+  else
+    echo "Failed to delete the partition table on $DISK."
+    exit 1
+  fi
+}
+
 # Partition Automation
 if [ "$DUALBOOT" == "yes" ]; then
     echo "Creating partitions for dual-boot setup..."
