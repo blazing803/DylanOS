@@ -59,6 +59,10 @@ read -p "Enter the disk you want to install to (e.g., /dev/sda): " DISK
 read -p "Do you want to wipe the partition table on $DISK? (yes/no) " WIPE_PARTITION
 WIPE_PARTITION=${WIPE_PARTITION:-no}
 
+# User Input for partitioning scheme (MBR/GPT)
+read -p "Choose partition scheme (MBR/GPT): " PARTITION_SCHEME
+PARTITION_SCHEME=${PARTITION_SCHEME:-GPT}  # Default to GPT if no input is provided
+
 # Function to delete the partition table by wiping the first 1MB of the disk
 delete_partition_table() {
   # Unmount partitions before wiping
@@ -81,13 +85,33 @@ if [ "$WIPE_PARTITION" == "yes" ]; then
     delete_partition_table
 fi
 
-# Partition Automation
-if [ "$DUALBOOT" == "yes" ]; then
-    echo "Creating partitions for dual-boot setup..."
-    echo -e "o\nn\np\n1\n\n+1G\nt\n1\nn\np\n2\n\n\nw" | fdisk "$DISK" || { echo "Failed to partition disk. Exiting."; exit 1; }
+# Validate partition scheme input
+if [[ ! "$PARTITION_SCHEME" =~ ^(MBR|GPT)$ ]]; then
+    echo "Invalid choice. Please choose either MBR or GPT."
+    exit 1
+fi
+
+# Partition Automation based on MBR or GPT
+if [ "$PARTITION_SCHEME" == "GPT" ]; then
+    if [ "$DUALBOOT" == "yes" ]; then
+        echo "Creating partitions for dual-boot setup with GPT..."
+        # Create GPT partition table (EFI partition, root partition, and Windows partition)
+        echo -e "g\nn\n1\n\n+1G\nt\n1\nn\n2\n\n+100G\nt\n2\nn\n3\n\n\nw" | gdisk "$DISK" || { echo "Failed to partition disk with GPT. Exiting."; exit 1; }
+    else
+        echo "Creating partitions for single-boot setup with GPT..."
+        # Create GPT partition table (EFI partition and root partition)
+        echo -e "g\nn\n1\n\n+1G\nt\n1\nn\n2\n\n\nw" | gdisk "$DISK" || { echo "Failed to partition disk with GPT. Exiting."; exit 1; }
+    fi
 else
-    echo "Creating partitions for single boot setup..."
-    echo -e "o\nn\np\n1\n\n+1G\nt\n1\nn\np\n2\n\n\nw" | fdisk "$DISK" || { echo "Failed to partition disk. Exiting."; exit 1; }
+    if [ "$DUALBOOT" == "yes" ]; then
+        echo "Creating partitions for dual-boot setup with MBR..."
+        # Create MBR partition table (EFI partition, root partition, and Windows partition)
+        echo -e "o\nn\np\n1\n\n+1G\nt\n1\nn\np\n2\n\n+100G\nt\n2\nn\np\n3\n\n\nw" | fdisk "$DISK" || { echo "Failed to partition disk with MBR. Exiting."; exit 1; }
+    else
+        echo "Creating partitions for single-boot setup with MBR..."
+        # Create MBR partition table (EFI partition and root partition)
+        echo -e "o\nn\np\n1\n\n+1G\nt\n1\nn\np\n2\n\n\nw" | fdisk "$DISK" || { echo "Failed to partition disk with MBR. Exiting."; exit 1; }
+    fi
 fi
 
 # Formatting Partitions
@@ -112,7 +136,7 @@ pacstrap -K /mnt base linux linux-firmware base-devel sof-firmware \
     xfce4-clipman-plugin xfce4-notes-plugin firefox \
     openssh alacritty iwd wpa_supplicant plank picom \
     pulseaudio networkmanager dmidecode grub nitrogen unzip \ 
-    efibootmgr pcmanfm wget ntp || { echo "Package installation failed."; exit 1; }
+    efibootmgr pcmanfm wget ntp os-prober || { echo "Package installation failed."; exit 1; }
 
 # Cloning Configuration Repository
 echo "Cloning configs repository to get pacman.conf..."
