@@ -63,7 +63,7 @@ WIPE_PARTITION=${WIPE_PARTITION:-no}
 delete_partition_table() {
   # Unmount partitions before wiping
   echo "Unmounting any mounted partitions on $DISK..."
-  umount "${DISK}"* || { echo "Failed to unmount partitions. Exiting."; exit 1; }
+  umount "${DISK}"* 
 
   # Wipe the partition table on $DISK
   echo "Wiping the partition table on $DISK..."
