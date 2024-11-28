@@ -140,9 +140,6 @@ echo "root:$PASSWORD" | chpasswd
 useradd -m -G wheel -s /bin/bash $USER
 echo "$USER:$PASSWORD" | chpasswd
 echo "%wheel ALL=(ALL) ALL" >> /etc/sudoers
-systemctl enable ntpd.service
-systemctl start ntpd.service
-systemctl enable lightdm
 EOF
 
 # Enabling Services
@@ -150,6 +147,8 @@ systemctl enable NetworkManager
 systemctl enable dhcpcd
 systemctl enable lightdm
 systemctl enable wpa_supplicant
+systemctl enable ntpd.service
+systemctl start ntpd.service
 
 mkdir -p /mnt/home/$USER/.config
 chown -R $USER:$USER /mnt/home/$USER/.config
