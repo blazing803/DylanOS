@@ -135,7 +135,7 @@ pacstrap -K /mnt base linux linux-firmware base-devel sof-firmware \
     xfce4-places-plugin xfce4-sensors-plugin xfce4-weather-plugin \
     xfce4-clipman-plugin xfce4-notes-plugin firefox \
     openssh alacritty iwd wpa_supplicant plank picom \
-    pulseaudio networkmanager dmidecode grub nitrogen unzip \ 
+    pulseaudio networkmanager dmidecode grub nitrogen unzip \
     efibootmgr pcmanfm wget ntp os-prober || { echo "Package installation failed."; exit 1; }
 
 # Cloning Configuration Repository
@@ -178,8 +178,8 @@ mkdir -p /mnt/home/$USER/.config
 chown -R $USER:$USER /mnt/home/$USER/.config
 
 # wallpaper dir 
-echo "setting up usr/share/backgrounds....."
-mkdir /usr/share/backgrounds
+echo "setting up /usr/share/backgrounds..."
+mkdir -p /usr/share/backgrounds
 
 # Download wallpapers from GitHub
 echo "Downloading wallpapers..."
@@ -193,8 +193,8 @@ cp -r /tmp/wallpapers-main/* /usr/share/backgrounds/ || { echo "Failed to copy w
 rm -rf /tmp/wallpapers.zip /tmp/wallpapers-main
 
 # Configure nitrogen to use wallpaper4.png
-mkdir -p /home/$USER/.config/nitrogen
-cat << EOF4 > /home/$USER/.config/nitrogen/bg-saved.cfg
+mkdir -p /mnt/home/$USER/.config/nitrogen
+cat <<EOF4 > /mnt/home/$USER/.config/nitrogen/bg-saved.cfg
 [xin_-1]
 file=/usr/share/backgrounds/wallpaper4.png
 mode=0
