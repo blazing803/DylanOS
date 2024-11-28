@@ -200,13 +200,9 @@ echo "ID_LIKE=arch" >> /mnt/etc/os-release
 # Bootloader Installation: Install GRUB and configure it based on UEFI or BIOS
 check_efi
 if [ $? -eq 0 ]; then
-    # UEFI system: Install GRUB and EFIBootMgr
-    pacman -S --noconfirm grub efibootmgr
     # Install GRUB for UEFI systems
     grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
 else
-    # BIOS system: Install GRUB for legacy BIOS
-    pacman -S --noconfirm grub
     # Install GRUB for BIOS systems
     grub-install --target=i386-pc --recheck "$DISK"
 fi
