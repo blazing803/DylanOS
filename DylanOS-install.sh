@@ -111,7 +111,8 @@ pacstrap -K /mnt base linux linux-firmware base-devel sof-firmware \
     xfce4-places-plugin xfce4-sensors-plugin xfce4-weather-plugin \
     xfce4-clipman-plugin xfce4-notes-plugin firefox \
     openssh alacritty iwd wpa_supplicant plank picom \
-    pulseaudio networkmanager dmidecode grub nitrogen unzip efibootmgr pcmanfm wget || { echo "Package installation failed."; exit 1; }
+    pulseaudio networkmanager dmidecode grub nitrogen unzip \ 
+    efibootmgr pcmanfm wget ntp || { echo "Package installation failed."; exit 1; }
 
 # Cloning Configuration Repository
 echo "Cloning configs repository to get pacman.conf..."
@@ -149,10 +150,13 @@ systemctl enable NetworkManager
 systemctl enable dhcpcd
 systemctl enable lightdm
 systemctl enable wpa_supplicant
-systemctl enable iwd
 
 mkdir -p /mnt/home/$USER/.config
 chown -R $USER:$USER /mnt/home/$USER/.config
+
+# wallpaper dir 
+echo "setting up usr/share/backgrounds....."
+mkdir /usr/share/backgrounds
 
 # Download wallpapers from GitHub
 echo "Downloading wallpapers..."
