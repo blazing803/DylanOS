@@ -61,6 +61,11 @@ WIPE_PARTITION=${WIPE_PARTITION:-no}
 
 # Function to delete the partition table by wiping the first 1MB of the disk
 delete_partition_table() {
+  # Unmount partitions before wiping
+  echo "Unmounting any mounted partitions on $DISK..."
+  umount "${DISK}"* || { echo "Failed to unmount partitions. Exiting."; exit 1; }
+
+  # Wipe the partition table on $DISK
   echo "Wiping the partition table on $DISK..."
   dd if=/dev/zero of=$DISK bs=512 count=2048 status=progress
   if [ $? -eq 0 ]; then
@@ -106,7 +111,7 @@ pacstrap -K /mnt base linux linux-firmware base-devel sof-firmware \
     xfce4-places-plugin xfce4-sensors-plugin xfce4-weather-plugin \
     xfce4-clipman-plugin xfce4-notes-plugin firefox \
     openssh alacritty iwd wpa_supplicant plank picom \
-    pulseaudio networkmanager dmidecode grub nitrogen unzip efibootmgr pcmanfm || { echo "Package installation failed."; exit 1; }
+    pulseaudio networkmanager dmidecode grub nitrogen unzip efibootmgr pcmanfm wget || { echo "Package installation failed."; exit 1; }
 
 # Cloning Configuration Repository
 echo "Cloning configs repository to get pacman.conf..."
