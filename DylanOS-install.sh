@@ -203,7 +203,7 @@ if [ $? -eq 0 ]; then
     # UEFI system: Install GRUB and EFIBootMgr
     pacman -S --noconfirm grub efibootmgr
     # Install GRUB for UEFI systems
-    grub-install --target=x86_64-efi --efi-directory=/mnt/boot --bootloader-id=GRUB
+    grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
 else
     # BIOS system: Install GRUB for legacy BIOS
     pacman -S --noconfirm grub
