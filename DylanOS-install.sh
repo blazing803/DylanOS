@@ -188,7 +188,10 @@ copy_config() {
     chown -R "$USER:$USER" "/mnt/home/$USER/.config/$config_dir"
 }
 copy_config "i3" "i3"
-copy_config "Plank" "plank"
+copy_config "nitrogen" "nitrogen"
+copy_config "plank" "plank"
+copy_config "pulse" "pulse"
+copy_config "xfce4" "xfce4"
 rm -rf /tmp/configs
 
 # Update /etc/os-release
