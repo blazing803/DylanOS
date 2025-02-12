@@ -193,9 +193,9 @@ rm -f /tmp/DylanOS-logo.png
 echo "Generating fstab..."
 genfstab -U /mnt >> /mnt/etc/fstab
 
-# Chroot into the new system
+# Chroot into the installed system
 echo "Chrooting into the new system..."
-arch-chroot /mnt /bin/bash <<EOF
+arch-chroot /mnt <<EOF
 
 # Set time zone and locale
 echo "Setting timezone..."
@@ -255,7 +255,7 @@ systemctl enable systemd-zram-setup@zram0.service
 
 # Install and configure GRUB
 echo "Installing and configuring GRUB..."
-grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=DylanOS-5.0 --recheck
+grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=grub --recheck
 grub-mkconfig -o /boot/grub/grub.cfg
 
 # Enable LightDM
