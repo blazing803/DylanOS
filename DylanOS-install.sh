@@ -25,8 +25,18 @@ cat << "EOF"
                      2023-2025
 EOF
 
+# User input prompts (moved below the ASCII art)
+echo "Please answer the following prompts."
+
+read -p "Enter the drive name (e.g., /dev/sda or /dev/nvme0n1): " drive_name
+read -p "Is this an NVMe drive? (y/n): " is_nvme
+read -p "Enter your timezone (e.g., America/New_York): " timezone
+read -p "Enter your preferred hostname (e.g., arch): " hostname
+read -p "Enter the username for your non-root user: " username
+read -p "Enter the swap size in MB (e.g., 2048 for 2GB): " swap_size
+
 # Check if required utilities are installed
-required_apps=("fdisk" "git" "pacstrap" "bootctl" "gio" "wget" "dd" "partprobe" "mkfs.fat" "mkfs.ext4")
+required_apps=("fdisk" "git" "pacstrap" "grub" "gio" "wget" "dd" "partprobe" "mkfs.fat" "mkfs.ext4" "efibootmgr" "networkmanager" "lightdm" "lightdm-gtk-greeter" "zramctl")
 missing_apps=()
 
 for app in "${required_apps[@]}"; do
@@ -44,16 +54,6 @@ if [ ${#missing_apps[@]} -gt 0 ]; then
     exit 1
 fi
 
-# Prompt for the required inputs upfront
-echo "Please answer the following prompts."
-
-read -p "Enter the drive name (e.g., /dev/sda or /dev/nvme0n1): " drive_name
-read -p "Is this an NVMe drive? (y/n): " is_nvme
-read -p "Enter your timezone (e.g., America/New_York): " timezone
-read -p "Enter your preferred hostname (e.g., arch): " hostname
-read -p "Enter the username for your non-root user: " username
-read -p "Enter the swap file size in MB (e.g., 2048 for 2GB): " swap_size
-
 # Confirm partitioning
 echo "Partitioning the disk $drive_name using fdisk..."
 read -p "Are you sure you want to partition $drive_name? This will erase all data on the disk. (y/n): " confirm
@@ -64,11 +64,9 @@ fi
 
 # Set partition names based on whether the drive is NVMe
 if [[ "$is_nvme" == "y" || "$is_nvme" == "Y" ]]; then
-    # If NVMe, use 'p1', 'p2' for partitions
     part1="${drive_name}p1"
     part2="${drive_name}p2"
 else
-    # If SATA, use '1', '2' for partitions
     part1="${drive_name}1"
     part2="${drive_name}2"
 fi
@@ -88,11 +86,9 @@ partprobe $drive_name
 # Format the partitions
 echo "Formatting partitions..."
 if [[ "$is_nvme" == "y" || "$is_nvme" == "Y" ]]; then
-    # For NVMe drives
     mkfs.fat -F32 $part1  # EFI system partition
     mkfs.ext4 $part2      # Root partition
 else
-    # For SATA drives
     mkfs.fat -F32 $part1  # EFI system partition
     mkfs.ext4 $part2      # Root partition
 fi
@@ -108,7 +104,7 @@ mount $part1 /mnt/boot
 
 # Install base system and additional packages
 echo "Installing base system, icon theme, and additional packages..."
-pacstrap /mnt base linux linux-firmware vim networkmanager sof-firmware base-devel sudo git adwaita-icon-theme
+pacstrap /mnt base linux linux-firmware vim networkmanager sof-firmware base-devel sudo git adwaita-icon-theme grub efibootmgr lightdm lightdm-gtk-greeter zram-generator
 
 # Install LXQt, XFCE4 panel, i3-gaps, and other utilities
 echo "Installing LXQt, XFCE4 panel, i3-gaps, and other utilities..."
@@ -221,33 +217,26 @@ passwd $username
 echo "Allowing $username to use sudo..."
 echo "$username ALL=(ALL) ALL" > /etc/sudoers.d/$username
 
-# Swap file setup
-echo "Setting up swap file..."
-dd if=/dev/zero of=/swapfile bs=1M count=$swap_size status=progress
-chmod 600 /swapfile
-mkswap /swapfile
-swapon /swapfile
-
-# Add swap entry to /etc/fstab for persistence
-echo "Adding swap entry to /etc/fstab..."
-echo '/swapfile none swap defaults 0 0' >> /etc/fstab
-
-# Install systemd-boot
-echo "Installing systemd-boot..."
-bootctl --path=/boot install
-
-# Create a systemd-boot entry for DylanOS
-echo "Creating systemd-boot entry..."
-cat <<EOF > /boot/loader/entries/dylanos.conf
-title   DylanOS 5.0
-linux   /vmlinuz-linux
-initrd  /initramfs-linux.img
-options root=PARTUUID=$(blkid -s PARTUUID -o value $part2) rw
-EOF
-
 # Enable NetworkManager service
 echo "Enabling NetworkManager service..."
 systemctl enable NetworkManager
+
+# Set up ZRAM for swap
+echo "Setting up ZRAM swap..."
+echo -e "ZRAM_SIZE=${swap_size}M" > /etc/systemd/zram-generator.conf
+systemctl enable systemd-zram-setup@zram0.service
+
+# Install GRUB and configure it
+echo "Installing GRUB bootloader..."
+grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
+
+# Generate GRUB configuration
+echo "Generating GRUB configuration..."
+grub-mkconfig -o /boot/grub/grub.cfg
+
+# Install LightDM and LightDM GTK Greeter
+echo "Enabling LightDM..."
+systemctl enable lightdm.service
 
 # Exit chroot
 exit
