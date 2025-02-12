@@ -1,9 +1,8 @@
 #!/bin/bash
 
-# Display ASCII art constantly at the top
+# Display ASCII art
 clear
 cat << "EOF"
-                                              
   _____        _              ____   _____   _____  ___  
  |  __ \      | |            / __ \ / ____| | ____|/ _ \ 
  | |  | |_   _| | __ _ _ __ | |  | | (___   | |__ | | | |                                            
@@ -25,7 +24,7 @@ cat << "EOF"
                      2023-2025
 EOF
 
-# User input prompts (moved below the ASCII art)
+# Collect user input
 echo "Please answer the following prompts."
 
 read -p "Enter the drive name (e.g., /dev/sda or /dev/nvme0n1): " drive_name
@@ -34,20 +33,16 @@ read -p "Enter your timezone (e.g., America/New_York): " timezone
 read -p "Enter your preferred hostname (e.g., arch): " hostname
 read -p "Enter the username for your non-root user: " username
 
-# ZRAM Swap Size Selection
+# ZRAM swap size selection
 echo "Please select the ZRAM swap size:"
 echo "1) 2GB"
 echo "2) 4GB"
 echo "3) 8GB"
 echo "4) 16GB"
-read -p "Enter your choice (1, 2, 3, or 4): " swap_size
+read -p "Enter your choice (1, 2, 3, or 4): " swap_choice
 
-read -p "Enter root password: " root_password
-read -p "Enter $username password: " user_password
-
-
-
-case "$zram_choice" in
+# Map swap choice to MB value
+case "$swap_choice" in
     1)
         swap_size=2048  # 2GB
         ;;
@@ -61,15 +56,20 @@ case "$zram_choice" in
         swap_size=16384 # 16GB
         ;;
     *)
-        echo "Invalid choice. Using 2GB as default."
+        echo "Invalid choice. Defaulting to 2GB."
         swap_size=2048  # Default to 2GB
         ;;
 esac
 
-# Check if required utilities are installed
+# Get root and user passwords
+read -sp "Enter root password: " root_password
+echo
+read -sp "Enter $username password: " user_password
+echo
+
+# Check for required utilities
 required_apps=("fdisk" "git" "pacstrap" "wget" "partprobe" "mkfs.fat" "mkfs.ext4" "efibootmgr" "zramctl" "chpasswd")
 missing_apps=()
-
 for app in "${required_apps[@]}"; do
     if ! command -v "$app" &> /dev/null; then
         missing_apps+=("$app")
@@ -133,8 +133,8 @@ echo "Mounting the EFI system partition..."
 mkdir /mnt/boot
 mount $part1 /mnt/boot
 
-# Install base system and additional packages
-echo "Installing base system, icon theme, and additional packages..."
+# Install base system and packages
+echo "Installing base system and additional packages..."
 pacstrap /mnt base linux linux-firmware vim networkmanager sof-firmware base-devel sudo git adwaita-icon-theme grub efibootmgr lightdm lightdm-gtk-greeter zram-generator
 
 # Install LXQt, XFCE4 panel, i3-gaps, and other utilities
@@ -197,12 +197,11 @@ genfstab -U /mnt >> /mnt/etc/fstab
 echo "Chrooting into the new system..."
 arch-chroot /mnt /bin/bash <<EOF
 
-# Set time zone
+# Set time zone and locale
 echo "Setting timezone..."
 ln -sf /usr/share/zoneinfo/$timezone /etc/localtime
 hwclock --systohc
 
-# Localization
 echo "Setting locale..."
 echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
 locale-gen
@@ -213,7 +212,7 @@ echo "Setting hostname..."
 echo "$hostname" > /etc/hostname
 echo "127.0.1.1  $hostname.localdomain  $hostname" >> /etc/hosts
 
-# Change OS information to DylanOS 5.0
+# Update OS information
 echo "Changing OS name and version..."
 
 # /etc/issue file
@@ -240,40 +239,33 @@ echo "root:$root_password" | chpasswd
 echo "Setting password for $username..."
 echo "$username:$user_password" | chpasswd
 
-# Create a new user
-echo "Creating a new user..."
+# Create a new user and give them sudo permissions
+echo "Creating new user: $username..."
 useradd -m -G wheel -s /bin/bash $username
-
-# Add user to sudoers
-echo "Allowing $username to use sudo..."
 echo "$username ALL=(ALL) ALL" > /etc/sudoers.d/$username
 
-# Enable NetworkManager service
-echo "Enabling NetworkManager service..."
+# Enable NetworkManager
+echo "Enabling NetworkManager..."
 systemctl enable NetworkManager
 
-# Set up ZRAM for swap
-echo "Setting up ZRAM swap with $swap_size MB..."
-echo -e "ZRAM_SIZE=${swap_size}M" > /etc/systemd/zram-generator.conf
+# Set up ZRAM swap
+echo "Setting up ZRAM swap..."
+echo "ZRAM_SIZE=${swap_size}M" > /etc/systemd/zram-generator.conf
 systemctl enable systemd-zram-setup@zram0.service
 
-# Install GRUB and configure it
-echo "Installing GRUB bootloader..."
+# Install and configure GRUB
+echo "Installing and configuring GRUB..."
 grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=DylanOS-5.0 --recheck
-
-# Generate GRUB configuration
-echo "Generating GRUB configuration..."
 grub-mkconfig -o /boot/grub/grub.cfg
 
-# Install LightDM and LightDM GTK Greeter
+# Enable LightDM
 echo "Enabling LightDM..."
 systemctl enable lightdm.service
 
-# Exit chroot
 exit
 EOF
 
-# Unmount the partitions
+# Unmount partitions
 echo "Unmounting partitions..."
 umount -R /mnt
 
