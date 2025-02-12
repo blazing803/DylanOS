@@ -35,25 +35,6 @@ read -p "Enter your preferred hostname (e.g., arch): " hostname
 read -p "Enter the username for your non-root user: " username
 read -p "Enter the swap size in MB (e.g., 2048 for 2GB): " swap_size
 
-# Check if required utilities are installed
-required_apps=("fdisk" "git" "pacstrap" "grub" "gio" "wget" "dd" "partprobe" "mkfs.fat" "mkfs.ext4" "efibootmgr" "networkmanager" "lightdm" "lightdm-gtk-greeter" "zramctl")
-missing_apps=()
-
-for app in "${required_apps[@]}"; do
-    if ! command -v "$app" &> /dev/null; then
-        missing_apps+=("$app")
-    fi
-done
-
-if [ ${#missing_apps[@]} -gt 0 ]; then
-    echo "The following required applications are missing:"
-    for app in "${missing_apps[@]}"; do
-        echo "- $app"
-    done
-    echo "Please install the missing applications before running the script."
-    exit 1
-fi
-
 # Confirm partitioning
 echo "Partitioning the disk $drive_name using fdisk..."
 read -p "Are you sure you want to partition $drive_name? This will erase all data on the disk. (y/n): " confirm
