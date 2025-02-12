@@ -33,7 +33,31 @@ read -p "Is this an NVMe drive? (y/n): " is_nvme
 read -p "Enter your timezone (e.g., America/New_York): " timezone
 read -p "Enter your preferred hostname (e.g., arch): " hostname
 read -p "Enter the username for your non-root user: " username
-read -p "Enter the swap size in MB (e.g., 2048 for 2GB): " swap_size
+read -p "Enter the swap size in GB (e.g., 2 for 2GB): " swap_size_gb
+read -p "Enter root password: " root_password
+read -p "Enter $username password: " user_password
+
+# Convert swap size from GB to MB (1 GB = 1024 MB)
+swap_size=$((swap_size_gb * 1024))
+
+# Check if required utilities are installed
+required_apps=("fdisk" "git" "pacstrap" "grub" "wget" "partprobe" "mkfs.fat" "mkfs.ext4" "efibootmgr" "networkmanager" "lightdm" "lightdm-gtk-greeter" "zramctl" "chpasswd")
+missing_apps=()
+
+for app in "${required_apps[@]}"; do
+    if ! command -v "$app" &> /dev/null; then
+        missing_apps+=("$app")
+    fi
+done
+
+if [ ${#missing_apps[@]} -gt 0 ]; then
+    echo "The following required applications are missing:"
+    for app in "${missing_apps[@]}"; do
+        echo "- $app"
+    done
+    echo "Please install the missing applications before running the script."
+    exit 1
+fi
 
 # Confirm partitioning
 echo "Partitioning the disk $drive_name using fdisk..."
@@ -122,10 +146,10 @@ cp -r /tmp/wallpapers/* /usr/share/backgrounds/
 echo "Cleaning up temporary files..."
 rm -rf /tmp/wallpapers
 
-# Download the DylanOS logo image
+# Download the DylanOS logo image from the updated URL
 echo "Downloading DylanOS-logo.png from GitHub..."
 cd /tmp
-wget https://github.com/blazing803/icons/raw/main/DyOS-icon.png -O /tmp/DylanOS-logo.png
+wget https://raw.githubusercontent.com/blazing803/icons/main/DylanOS-logo.png -O /tmp/DylanOS-logo.png
 
 # Create the /usr/share/pixmaps directory if it doesn't already exist
 echo "Creating /usr/share/pixmaps if it doesn't already exist..."
@@ -182,17 +206,17 @@ SUPPORT_URL="https://dylanos.com/support"
 BUG_REPORT_URL="https://dylanos.com/bugs"
 EOF
 
-# Set root password
+# Set root password using chpasswd
 echo "Setting root password..."
-passwd
+echo "root:$root_password" | chpasswd
+
+# Set user password using chpasswd
+echo "Setting password for $username..."
+echo "$username:$user_password" | chpasswd
 
 # Create a new user
 echo "Creating a new user..."
 useradd -m -G wheel -s /bin/bash $username
-
-# Set password for the new user
-echo "Setting password for $username..."
-passwd $username
 
 # Add user to sudoers
 echo "Allowing $username to use sudo..."
@@ -209,7 +233,7 @@ systemctl enable systemd-zram-setup@zram0.service
 
 # Install GRUB and configure it
 echo "Installing GRUB bootloader..."
-grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=GRUB
+grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=DylanOS-5.0 --recheck
 
 # Generate GRUB configuration
 echo "Generating GRUB configuration..."
