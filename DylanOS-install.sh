@@ -41,7 +41,7 @@ read -p "Enter $username password: " user_password
 swap_size=$((swap_size_gb * 1024))
 
 # Check if required utilities are installed
-required_apps=("fdisk" "git" "pacstrap" "grub" "wget" "partprobe" "mkfs.fat" "mkfs.ext4" "efibootmgr" "networkmanager" "lightdm" "lightdm-gtk-greeter" "zramctl" "chpasswd")
+required_apps=("fdisk" "git" "pacstrap" "wget" "partprobe" "mkfs.fat" "mkfs.ext4" "efibootmgr" "zramctl" "chpasswd")
 missing_apps=()
 
 for app in "${required_apps[@]}"; do
