@@ -37,8 +37,32 @@ read -p "Enter the swap size in GB (e.g., 2 for 2GB): " swap_size_gb
 read -p "Enter root password: " root_password
 read -p "Enter $username password: " user_password
 
-# Convert swap size from GB to MB (1 GB = 1024 MB)
-swap_size=$((swap_size_gb * 1024))
+# ZRAM Swap Size Selection
+echo "Please select the ZRAM swap size:"
+echo "1) 2GB"
+echo "2) 4GB"
+echo "3) 8GB"
+echo "4) 16GB"
+read -p "Enter your choice (1, 2, 3, or 4): " zram_choice
+
+case "$zram_choice" in
+    1)
+        swap_size=2048  # 2GB
+        ;;
+    2)
+        swap_size=4096  # 4GB
+        ;;
+    3)
+        swap_size=8192  # 8GB
+        ;;
+    4)
+        swap_size=16384 # 16GB
+        ;;
+    *)
+        echo "Invalid choice. Using 2GB as default."
+        swap_size=2048  # Default to 2GB
+        ;;
+esac
 
 # Check if required utilities are installed
 required_apps=("fdisk" "git" "pacstrap" "wget" "partprobe" "mkfs.fat" "mkfs.ext4" "efibootmgr" "zramctl" "chpasswd")
@@ -227,7 +251,7 @@ echo "Enabling NetworkManager service..."
 systemctl enable NetworkManager
 
 # Set up ZRAM for swap
-echo "Setting up ZRAM swap..."
+echo "Setting up ZRAM swap with $swap_size MB..."
 echo -e "ZRAM_SIZE=${swap_size}M" > /etc/systemd/zram-generator.conf
 systemctl enable systemd-zram-setup@zram0.service
 
