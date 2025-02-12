@@ -141,54 +141,6 @@ pacstrap /mnt base linux linux-firmware vim networkmanager sof-firmware base-dev
 echo "Installing LXQt, XFCE4 panel, i3-gaps, and other utilities..."
 pacstrap /mnt lxqt-session lxqt-panel xfce4-panel i3-gaps xorg-server plank nitrogen picom pcmanfm ark firefox konsole notepadqq
 
-# Clone the repository containing /etc/skel
-echo "Cloning /etc/skel from GitHub..."
-cd /tmp
-git clone https://github.com/blazing803/configs.git
-
-# Create .config folder inside /etc/skel
-echo "Moving configurations to /etc/skel/.config..."
-mkdir -p /etc/skel/.config
-cp -r /tmp/configs/* /etc/skel/.config/
-
-# Clean up the cloned repository
-echo "Cleaning up temporary files..."
-rm -rf /tmp/configs
-
-# Download wallpapers and set them up
-echo "Cloning the wallpapers repository from GitHub..."
-cd /tmp
-git clone https://github.com/blazing803/wallpapers.git
-
-# Create the /usr/share/backgrounds directory if it doesn't exist
-echo "Creating /usr/share/backgrounds if it doesn't already exist..."
-mkdir -p /usr/share/backgrounds
-
-# Copy the wallpapers to /usr/share/backgrounds
-echo "Copying wallpapers to /usr/share/backgrounds..."
-cp -r /tmp/wallpapers/* /usr/share/backgrounds/
-
-# Clean up the cloned repository
-echo "Cleaning up temporary files..."
-rm -rf /tmp/wallpapers
-
-# Download the DylanOS logo image from the updated URL
-echo "Downloading DylanOS-logo.png from GitHub..."
-cd /tmp
-wget https://raw.githubusercontent.com/blazing803/icons/main/DylanOS-logo.png -O /tmp/DylanOS-logo.png
-
-# Create the /usr/share/pixmaps directory if it doesn't already exist
-echo "Creating /usr/share/pixmaps if it doesn't already exist..."
-mkdir -p /usr/share/pixmaps
-
-# Copy the DylanOS logo image to /usr/share/pixmaps
-echo "Copying DylanOS-logo.png to /usr/share/pixmaps..."
-cp /tmp/DylanOS-logo.png /usr/share/pixmaps/
-
-# Clean up the temporary files
-echo "Cleaning up temporary files..."
-rm -f /tmp/DylanOS-logo.png
-
 # Generate fstab
 echo "Generating fstab..."
 genfstab -U /mnt >> /mnt/etc/fstab
@@ -255,7 +207,7 @@ systemctl enable systemd-zram-setup@zram0.service
 
 # Install and configure GRUB
 echo "Installing and configuring GRUB..."
-grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=grub --recheck
+grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=DylanOS-5.0 --recheck
 grub-mkconfig -o /boot/grub/grub.cfg
 
 # Enable LightDM
