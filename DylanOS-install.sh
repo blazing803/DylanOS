@@ -33,9 +33,6 @@ read -p "Is this an NVMe drive? (y/n): " is_nvme
 read -p "Enter your timezone (e.g., America/New_York): " timezone
 read -p "Enter your preferred hostname (e.g., arch): " hostname
 read -p "Enter the username for your non-root user: " username
-read -p "Enter the swap size in GB (e.g., 2 for 2GB): " swap_size_gb
-read -p "Enter root password: " root_password
-read -p "Enter $username password: " user_password
 
 # ZRAM Swap Size Selection
 echo "Please select the ZRAM swap size:"
@@ -43,7 +40,12 @@ echo "1) 2GB"
 echo "2) 4GB"
 echo "3) 8GB"
 echo "4) 16GB"
-read -p "Enter your choice (1, 2, 3, or 4): " zram_choice
+read -p "Enter your choice (1, 2, 3, or 4): " swap_size
+
+read -p "Enter root password: " root_password
+read -p "Enter $username password: " user_password
+
+
 
 case "$zram_choice" in
     1)
