@@ -25,6 +25,25 @@ cat << "EOF"
                      2023-2025
 EOF
 
+# Check if required utilities are installed
+required_apps=("fdisk" "git" "pacstrap" "bootctl" "gio" "wget" "dd" "partprobe" "mkfs.fat" "mkfs.ext4")
+missing_apps=()
+
+for app in "${required_apps[@]}"; do
+    if ! command -v "$app" &> /dev/null; then
+        missing_apps+=("$app")
+    fi
+done
+
+if [ ${#missing_apps[@]} -gt 0 ]; then
+    echo "The following required applications are missing:"
+    for app in "${missing_apps[@]}"; do
+        echo "- $app"
+    done
+    echo "Please install the missing applications before running the script."
+    exit 1
+fi
+
 # Prompt for the required inputs upfront
 echo "Please answer the following prompts."
 
@@ -88,10 +107,10 @@ mkdir /mnt/boot
 mount $part1 /mnt/boot
 
 # Install base system and additional packages
-echo "Installing base system, sof-firmware, base-devel..."
-pacstrap /mnt base linux linux-firmware vim networkmanager sof-firmware base-devel sudo git
+echo "Installing base system, icon theme, and additional packages..."
+pacstrap /mnt base linux linux-firmware vim networkmanager sof-firmware base-devel sudo git adwaita-icon-theme
 
-# Install the additional packages you requested
+# Install LXQt, XFCE4 panel, i3-gaps, and other utilities
 echo "Installing LXQt, XFCE4 panel, i3-gaps, and other utilities..."
 pacstrap /mnt lxqt-session lxqt-panel xfce4-panel i3-gaps xorg-server plank nitrogen picom pcmanfm ark firefox konsole notepadqq
 
@@ -100,13 +119,10 @@ echo "Cloning /etc/skel from GitHub..."
 cd /tmp
 git clone https://github.com/blazing803/configs.git
 
-# Copy the contents of the skel directory to /etc/skel
-echo "Copying /etc/skel from the repository..."
-cp -r /tmp/configs/skel/* /etc/skel/
-
-# Copy /etc/skel to the root user's home directory
-echo "Copying /etc/skel to the root user's home directory..."
-cp -r /etc/skel/* /root/
+# Create .config folder inside /etc/skel
+echo "Moving configurations to /etc/skel/.config..."
+mkdir -p /etc/skel/.config
+cp -r /tmp/configs/* /etc/skel/.config/
 
 # Clean up the cloned repository
 echo "Cleaning up temporary files..."
@@ -134,7 +150,7 @@ echo "Downloading DylanOS-logo.png from GitHub..."
 cd /tmp
 wget https://github.com/blazing803/icons/raw/main/DyOS-icon.png -O /tmp/DylanOS-logo.png
 
-# Create the /usr/share/pixmaps directory if it doesn't exist
+# Create the /usr/share/pixmaps directory if it doesn't already exist
 echo "Creating /usr/share/pixmaps if it doesn't already exist..."
 mkdir -p /usr/share/pixmaps
 
@@ -170,6 +186,25 @@ echo "Setting hostname..."
 echo "$hostname" > /etc/hostname
 echo "127.0.1.1  $hostname.localdomain  $hostname" >> /etc/hosts
 
+# Change OS information to DylanOS 5.0
+echo "Changing OS name and version..."
+
+# /etc/issue file
+echo "DylanOS 5.0" > /etc/issue
+
+# /etc/os-release file
+cat <<EOF > /etc/os-release
+NAME="DylanOS"
+VERSION="5.0"
+ID=dylanos
+ID_LIKE=arch
+PRETTY_NAME="DylanOS 5.0"
+VERSION_ID="5.0"
+HOME_URL="https://dylanos.com"
+SUPPORT_URL="https://dylanos.com/support"
+BUG_REPORT_URL="https://dylanos.com/bugs"
+EOF
+
 # Set root password
 echo "Setting root password..."
 passwd
@@ -201,9 +236,9 @@ echo '/swapfile none swap defaults 0 0' >> /etc/fstab
 echo "Installing systemd-boot..."
 bootctl --path=/boot install
 
-# Create a systemd-boot entry for Arch
+# Create a systemd-boot entry for DylanOS
 echo "Creating systemd-boot entry..."
-cat <<EOF > /boot/loader/entries/arch.conf
+cat <<EOF > /boot/loader/entries/dylanos.conf
 title   DylanOS 5.0
 linux   /vmlinuz-linux
 initrd  /initramfs-linux.img
