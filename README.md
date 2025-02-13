@@ -1,7 +1,7 @@
 ***if you are lost and don't know how to get the Dylan OS install script up and running follow the instructions below you should be running the latest Arch Linux installer ISO if you are running anything like Debian or any other Linux system that isn't the Arch Linux installer ISO from the official Arch Linux website then download that ISO and Flash it to a USB and then go back and follow the instructions once booted into the Arch Linux installer ISO I will provide instructions in case you already have a Arch Linux ISO and what to do to bypass the outdated restrictions such as things not being able to download properly***
 ----------------------------------------------------------------------------------------------------------------**this is the only instructions you should have to follow if you're on the latest Arch Linux installer ISO**
 
-pacman -S dos2unix git wget
+pacman -Sy dos2unix git wget
 
 git clone https://github.com/blazing803/DylanOS
 
