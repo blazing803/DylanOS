@@ -1,4 +1,3 @@
-
 #!/bin/bash
 
 # Display ASCII art
@@ -150,7 +149,7 @@ pacstrap -K /mnt lxqt-session lxqt-panel \
 
 # Chroot into the installed system
 echo "Chrooting into the new system..."    
-arch-chroot /mnt <<EOF
+arch-chroot /mnt << "EOF"
 
 # Set time zone and locale
 echo "Setting timezone..."
@@ -174,7 +173,7 @@ echo "Changing OS name and version..."
 echo "DylanOS 5.0" > /etc/issue
 
 # /etc/os-release file
-cat <<EOF > /etc/os-release
+cat << "EOF" > /etc/os-release
 NAME="DylanOS"
 VERSION="5.0"
 ID=dylanos
@@ -184,6 +183,7 @@ VERSION_ID="5.0"
 HOME_URL="https://dylanos.com"
 SUPPORT_URL="https://dylanos.com/support"
 BUG_REPORT_URL="https://dylanos.com/bugs"
+EOF
 
 # Set root password using chpasswd
 echo "Setting root password..."
@@ -246,6 +246,7 @@ grub-mkconfig -o /boot/grub/grub.cfg
 echo "installing and Enabling LightDM..."
 pacman -S --noconfirm lightdm lightdm-gtk-greeter
 systemctl enable lightdm.service
+
 EOF
 
 exit
@@ -268,3 +269,4 @@ chroot_prompt() {
 }
 
 echo "Installation complete! We Hope check for errors and thanks for using the bata DylanOS install script."
+
