@@ -47,9 +47,6 @@ Include = /etc/pacman.d/mirrorlist
 
 [multilib]
 Include = /etc/pacman.d/mirrorlist
-
-
-
-
-
-
+------------------------------------------------------------------------------------------------------------
+**also I currently have school and the scripts may break a lot just to warn all of you that are trying out my project so if you successfully install Dylan OS let me know if anything is broken or needs to be fixed thanks
+I hope you enjoy this Linux distribution it is been a Year's long project for me so let me know if you guys enjoy it anything on Arch Linux is reverse compatible if Dylan OS which means you can use the Aur the arch user repository on Dylan OS Dylan OS is not like Manjaro because Manjaro uses a modified version of the core repos Dylan OS uses the regular Arch Linux repos for everything and remember if you have problems look at the arch Wiki or directly ask me for help using GitHub requests and I will decide whether it's a Arch Linux issue or Dylan OS issue**
