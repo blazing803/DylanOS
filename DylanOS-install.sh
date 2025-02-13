@@ -1,3 +1,4 @@
+
 #!/bin/bash
 
 # Display ASCII art
@@ -21,7 +22,7 @@ cat << "EOF"
       .* #*===+##. .%#+#..#*#%+  ##*===+# =.      
       * =#======+##. .%#=.#%-  ##*======#= +.     
       # *############*  ... :############# #.     
-                     2023-2025
+                     2023-2025(2/13/2025 bata) 
 EOF
 
 # Collect user input
@@ -32,6 +33,12 @@ read -p "Is this an NVMe drive? (y/n): " is_nvme
 read -p "Enter your timezone (e.g., America/New_York): " timezone
 read -p "Enter your preferred hostname (e.g., arch): " hostname
 read -p "Enter the username for your non-root user: " username
+
+# Get root and user passwords
+read -sp "Enter root password: " root_password
+echo
+read -sp "Enter $username password: " user_password
+echo
 
 # ZRAM swap size selection
 echo "Please select the ZRAM swap size:"
@@ -61,14 +68,8 @@ case "$swap_choice" in
         ;;
 esac
 
-# Get root and user passwords
-read -sp "Enter root password: " root_password
-echo
-read -sp "Enter $username password: " user_password
-echo
-
 # Check for required utilities
-required_apps=("fdisk" "git" "pacstrap" "wget" "partprobe" "mkfs.fat" "mkfs.ext4" "efibootmgr" "zramctl" "chpasswd")
+required_apps=("fdisk" "git" "pacstrap" "wget" "partprobe" "mkfs.fat" "mkfs.ext4" "chpasswd")
 missing_apps=()
 for app in "${required_apps[@]}"; do
     if ! command -v "$app" &> /dev/null; then
@@ -130,23 +131,25 @@ mount $part2 /mnt
 
 # Mount the EFI system partition
 echo "Mounting the EFI system partition..."
-mkdir /mnt/boot
-mount $part1 /mnt/boot
+mkdir /mnt/boot/efi
+mount $part1 /mnt/boot/efi
 
 # Install base system and packages
-echo "Installing base system and additional packages..."
-pacstrap /mnt base linux linux-firmware vim networkmanager sof-firmware base-devel sudo git adwaita-icon-theme grub efibootmgr lightdm lightdm-gtk-greeter zram-generator
-
-# Install LXQt, XFCE4 panel, i3-gaps, and other utilities
-echo "Installing LXQt, XFCE4 panel, i3-gaps, and other utilities..."
-pacstrap /mnt lxqt-session lxqt-panel xfce4-panel i3-gaps xorg-server plank nitrogen picom pcmanfm ark firefox konsole notepadqq
+echo "Installing base system..."
+pacstrap -K /mnt base linux linux-firmware 
 
 # Generate fstab
 echo "Generating fstab..."
 genfstab -U /mnt >> /mnt/etc/fstab
 
+# Install other utilities
+echo "Installing DylanOS base..."
+pacstrap -K /mnt lxqt-session lxqt-panel \
+ xfce4-panel i3-gaps xorg-server plank nitrogen \
+ picom konsole git wget sudo git adwaita-icon-theme 
+
 # Chroot into the installed system
-echo "Chrooting into the new system..."
+echo "Chrooting into the new system..."    
 arch-chroot /mnt <<EOF
 
 # Set time zone and locale
@@ -181,7 +184,6 @@ VERSION_ID="5.0"
 HOME_URL="https://dylanos.com"
 SUPPORT_URL="https://dylanos.com/support"
 BUG_REPORT_URL="https://dylanos.com/bugs"
-EOF
 
 # Set root password using chpasswd
 echo "Setting root password..."
@@ -191,34 +193,78 @@ echo "root:$root_password" | chpasswd
 echo "Setting password for $username..."
 echo "$username:$user_password" | chpasswd
 
+# install extra DylanOS apps
+pacman -S --noconfirm pcmanfm ark firefox  notepadqq vim sof-firmware base-devel
+
+# Create /usr/share/backgrounds directory if it doesn't exist
+echo "Creating /usr/share/backgrounds directory..."
+mkdir -p /usr/share/backgrounds
+
+# Clone the wallpaper repository from GitHub
+echo "Cloning wallpapers from the repository..."
+git clone https://github.com/blazing803/wallpapers /tmp/wallpapers
+
+# Copy the wallpapers to /usr/share/backgrounds
+echo "Copying wallpapers to /usr/share/backgrounds..."
+cp -r /tmp/wallpapers/* /usr/share/backgrounds/
+
+# Clean up the cloned repository
+echo "Cleaning up..."
+rm -rf /tmp/wallpapers
+
+git clone https://github.com/blazing803/configs.git /tmp/configs
+mkdir -p ~/.config
+cp -r /tmp/configs/* ~/.config/
+sudo cp -r ~/.config /root/
+sudo cp -r ~/.config /etc/skel/
+
 # Create a new user and give them sudo permissions
 echo "Creating new user: $username..."
 useradd -m -G wheel -s /bin/bash $username
 echo "$username ALL=(ALL) ALL" > /etc/sudoers.d/$username
 
+ls -la /home/ $username
+
 # Enable NetworkManager
-echo "Enabling NetworkManager..."
+echo "installing and Enabling NetworkManager..."
+pacman -S --noconfirm networkmanager
 systemctl enable NetworkManager
 
 # Set up ZRAM swap
-echo "Setting up ZRAM swap..."
+echo "installing and Setting up ZRAM swap..."
+pacman -S --noconfirm zram-generator
 echo "ZRAM_SIZE=${swap_size}M" > /etc/systemd/zram-generator.conf
 systemctl enable systemd-zram-setup@zram0.service
 
 # Install and configure GRUB
 echo "Installing and configuring GRUB..."
-grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=DylanOS-5.0 --recheck
+pacman -S --noconfirm grub efibootmgr
+grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=DylanOS-5.0 --recheck
 grub-mkconfig -o /boot/grub/grub.cfg
 
 # Enable LightDM
-echo "Enabling LightDM..."
+echo "installing and Enabling LightDM..."
+pacman -S --noconfirm lightdm lightdm-gtk-greeter
 systemctl enable lightdm.service
+EOF
 
 exit
-EOF
 
 # Unmount partitions
 echo "Unmounting partitions..."
 umount -R /mnt
 
-echo "Installation complete! Reboot and remove the installation media."
+# Function to ask if the user wants to chroot into the new system
+chroot_prompt() {
+    echo "Would you like to chroot into the system now? (y/n)"
+    read -p "Enter your choice: " chroot_choice
+
+    if [[ "$chroot_choice" == "y" || "$chroot_choice" == "Y" ]]; then
+        echo "Chrooting into the new system..."
+        mount $part2 /mnt && arch-chroot /mnt
+    else
+        echo "You chose not to chroot into the system."
+    fi
+}
+
+echo "Installation complete! We Hope check for errors and thanks for using the bata DylanOS install script."
